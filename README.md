@@ -1,6 +1,6 @@
 # JW Watermark
 
-[![Latest Version](https://img.shields.io/packagist/v/jw_301/.svg?style=flat-square)](https://github.com/DMKEBUSINESSGMBH/mksamlauth/releases)
+[![Latest Version](https://img.shields.io/packagist/v/jw_301/.svg?style=flat-square)](https://github.com/jw_301/jw_watermark/releases)
 
 This extension adds a Fluid ViewHelper that adds a Watermark image on top of an image.
 
