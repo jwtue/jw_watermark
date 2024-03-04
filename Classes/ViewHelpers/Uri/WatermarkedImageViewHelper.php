@@ -65,8 +65,8 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
         $treatIdAsReference = $arguments['treatIdAsReference'];
         $absolute = $arguments['absolute'];
 
-        if ((is_null($src) && is_null($image)) || (!is_null($src) && !is_null($image))) {
-            throw new Exception('You must either specify a string src or a File object.', 1460976233);
+        if (($src === '' && $image === null) || ($src !== '' && $image !== null)) {
+            throw new Exception($this->getExceptionMessage('You must either specify a string src or a File object.'), 1382284106);
         }
 
         try {
