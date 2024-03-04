@@ -7,13 +7,13 @@ $EM_CONF[$_EXTKEY] = array(
 'author_company' => '',
 'author_email' => '',
 'dependencies' => 'extbase,fluid',
-'state' => 'beta',
+'state' => 'stable',
 'clearCacheOnLoad' => '1',
-'version' => '0.9.0',
+'version' => '12.0.0',
 'constraints' => array(
 	'depends' => array(
-		'typo3' => '8.7.0-10.9.99',
-		'php' => '5.4.0-8.0.99',
+		'typo3' => '12.0.0-12.9.99',
+		'php' => '8.0.0-8.3.99',
 		'extbase' => '1.0.0-0.0.0',
 		'fluid' => '1.0.0-0.0.0',
 		)

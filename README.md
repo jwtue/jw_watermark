@@ -1,6 +1,6 @@
 # JW Watermark
 
-[![Latest Version](https://img.shields.io/packagist/v/jw_301/jw_watermark.svg?style=flat-square)](https://packagist.org/packages/jw_301/jw_watermark)
+[![Latest Version](https://img.shields.io/packagist/v/jwtue/jw_watermark.svg?style=flat-square)](https://packagist.org/packages/jwtue/jw_watermark)
 
 This extension adds a Fluid ViewHelper that adds a Watermark image on top of an image.
 
@@ -9,7 +9,7 @@ This extension adds a Fluid ViewHelper that adds a Watermark image on top of an 
 Open a command console, enter your project directory and execute the following command to download the latest stable version of this package:
 
 ```
-$ composer require jw_301/jw_watermark
+$ composer require jwtue/jw_watermark
 ```
 
 This command requires you to have Composer installed globally, as explained in the installation chapter of the Composer documentation.
@@ -21,15 +21,22 @@ Alternatively, you can install it without composer through the Typo3 extension r
 To use the watermark viewhelper, first import the watermark ViewHelper namespace at the beginning of the fluid HTML file like this (add the second line to an existing html tag):
 
 ```
-<html xmlns:f="http://typo3.org/ns/TYPO3/CMS/Fluid/ViewHelpers" 
-	 xmlns:jw="http://typo3.org/ns/Jw301/Watermark/ViewHelpers"
+<html xmlns:f="http://typo3.org/ns/TYPO3/CMS/Fluid/ViewHelper" 
+	 xmlns:jw="http://typo3.org/ns/JwTue/Watermark/ViewHelper"
 	 data-namespace-typo3-fluid="true">
 ```
 
 A typical usage then would look like this:
 
 ```
-<a title="{file.title}" data-description="{file.description}" href="{jw:watermark(watermarkSrc: '/fileadmin/Watermark.png', watermarkOpacity: '1', watermarkBackgroundColor: 'FFFFFF', watermarkBackgroundOpacity: '0', watermarkOffset: 0, watermarkPositionVertical: 'bottom', src: file.uid, treatIdAsReference: 1, width: settings.media.popup.width, height: settings.media.popup.height)}">
+<!-- In an embedded image -->
+<jw:watermarkedImage watermarkSrc="/fileadmin/Watermark.png" watermarkOpacity="1" watermarkBackgroundColor="FFFFFF" watermarkBackgroundOpacity="0" watermarkOffset: 0, watermarkPositionVertical="bottom" src="{file.uid}" treatIdAsReference="1" />
+<!-- or -->
+<img src="{jw:uri.watermarkedImage(watermarkSrc: '/fileadmin/Watermark.png', watermarkOpacity: '1', watermarkBackgroundColor: 'FFFFFF', watermarkBackgroundOpacity: '0', watermarkOffset: 0, watermarkPositionVertical: 'bottom', src: file.uid, treatIdAsReference: 1)}">
+
+<!-- In a link -->
+
+<a title="{file.title}" data-description="{file.description}" href="{jw:uri.watermarkedImage(watermarkSrc: '/fileadmin/Watermark.png', watermarkOpacity: '1', watermarkBackgroundColor: 'FFFFFF', watermarkBackgroundOpacity: '0', watermarkOffset: 0, watermarkPositionVertical: 'bottom', src: file.uid, treatIdAsReference: 1, width: settings.media.popup.width, height: settings.media.popup.height)}">
     <f:render partial="Media/Rendering/Image" arguments="{file: file, dimensions: dimensions, settings: settings}" />
 </a>
 ```
@@ -79,10 +86,10 @@ Offset from the edge in pixels (horizontally and vertically)
 
 ## Restrictions
 
-Currently, only PNG watermarks have been tested, but JPG Watermarks may work as well. Support for SVG ist unknown.
+Currently, only PNG watermarks have been tested, but JPG Watermarks may work as well. Support for SVG is unknown.
 
 Also, the ViewHelper will only apply watermarks to JPEG images, not any other image formats.
 
 ## Issues and feature requests
 
-Please report issues and request features at https://github.com/JW301/jw_watermark/issues.
+Please report issues and request features at https://github.com/jwtue/jw_watermark/issues.

@@ -1,8 +1,8 @@
 {
-  "name": "jw_301/jw_watermark",
+  "name": "jwtue/jw_watermark",
   "type": "typo3-cms-extension",
   "description": "Watermark Extension for TYPO3, adding a ViewHelper that creates watermarks.",
-  "homepage": "https://github.com/JW301/jw_watermark",
+  "homepage": "https://github.com/jwtue/jw_watermark",
   "license": "MIT",
   "keywords": [
     "TYPO3 CMS",
@@ -10,18 +10,16 @@
     "viewhelper"
   ],
   "support": {
-    "issues": "https://github.com/JW301/jw_watermark/issues"
+    "issues": "https://github.com/jwtue/jw_watermark/issues"
   },
   "require": {
-    "typo3/cms-core": "^8.7 || ^9.5 || ^10.4"
+    "typo3/cms-core": "^12.4",
+    "php": ">=8.0.0"
   },
   "autoload": {
     "psr-4": {
-      "Jw301\\Watermark\\": "Classes"
-    },
-    "classmap": [
-      "Classes"
-    ]
+      "JwTue\\Watermark\\": "Classes"
+    }
   },
   "extra": {
     "typo3/cms": {
