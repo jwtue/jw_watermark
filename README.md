@@ -21,8 +21,8 @@ Alternatively, you can install it without composer through the Typo3 extension r
 To use the watermark viewhelper, first import the watermark ViewHelper namespace at the beginning of the fluid HTML file like this (add the second line to an existing html tag):
 
 ```
-<html xmlns:f="http://typo3.org/ns/TYPO3/CMS/Fluid/ViewHelper" 
-	 xmlns:jw="http://typo3.org/ns/JwTue/Watermark/ViewHelper"
+<html xmlns:f="http://typo3.org/ns/TYPO3/CMS/Fluid/ViewHelpers" 
+	 xmlns:jw="http://typo3.org/ns/JwTue/Watermark/ViewHelpers"
 	 data-namespace-typo3-fluid="true">
 ```
 
