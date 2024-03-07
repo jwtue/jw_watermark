@@ -44,9 +44,14 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
         $this->registerArgument('watermarkOpacity', 'string', 'opacity value for the watermark image (0=fully transparent, 1=fully opaque)');
         $this->registerArgument('watermarkBackgroundColor', 'string', 'hex code for the background color of the watermark');
         $this->registerArgument('watermarkBackgroundOpacity', 'string', 'opacity value for the background color (0=fully transparent, 1=fully opaque)');
-        $this->registerArgument('watermarkOffset', 'pixels', 'offset from the edge in pixels');
+        $this->registerArgument('watermarkOffset', 'int', 'offset from the edge in pixels. If watermarkOffsetRelative is set, this is interpreted as a percentage value of the image', false, 0);
+		$this->registerArgument('watermarkOffsetRelative', 'string', 'Interpret watermark offset relative to image dimension (values: width, height, short, long). Default: none', false, false);
         $this->registerArgument('watermarkPositionHorizontal', 'string', 'horizontal position in the image (left/center/right)');
         $this->registerArgument('watermarkPositionVertical', 'string', 'vertical position in the image (top/middle/bottom)');
+		$this->registerArgument('watermarkWidth', 'int', 'Water mark width in pixels. If watermarkWidthRelative is set, this is interpreted as a percentage value of the image.', false, false);
+		$this->registerArgument('watermarkHeight', 'int', 'Water mark height in pixels. If watermarkHeightRelative is set, this is interpreted as a percentage value of the image.', false, false);
+		$this->registerArgument('watermarkWidthRelative', 'string', 'Interpret watermark width relative to image dimension (values: width, height, short, long). Default: none', false, false);
+		$this->registerArgument('watermarkHeightRelative', 'string', 'Interpret watermark width relative to image dimension (values: width, height, short, long). Default: none', false, false);
     }
 
     /**
@@ -118,8 +123,13 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 			'watermarkBackgroundColor' => $arguments['watermarkBackgroundColor'],
 			'watermarkBackgroundOpacity' => $arguments['watermarkBackgroundOpacity'],
 			'watermarkOffset' => $arguments['watermarkOffset'],
+			'watermarkOffsetRelative' => $arguments['watermarkOffsetRelative'],
 			'watermarkPositionHorizontal' => $arguments['watermarkPositionHorizontal'],
-			'watermarkPositionVertical' => $arguments['watermarkPositionVertical']
+			'watermarkPositionVertical' => $arguments['watermarkPositionVertical'],
+			'watermarkWidth' => $arguments['watermarkWidth'],
+			'watermarkWidthRelative' => $arguments['watermarkWidthRelative'],
+			'watermarkHeight' => $arguments['watermarkHeight'],
+			'watermarkHeightRelative' => $arguments['watermarkHeightRelative']
 		];
 		
 		$processedImage = $imageService->applyProcessingInstructions($image, $processingInstructions);
@@ -141,17 +151,72 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 				$watermarkBitmap = imagecreatefromstring($watermark->getContents());
 				imagealphablending($watermarkBitmap, true);
 				imagesavealpha($watermarkBitmap, true);
-				
-				$watermarkOpacityBitmap = imagecreatetruecolor(imagesx($watermarkBitmap), imagesy($watermarkBitmap));
+
+				$imageWidth = imagesx($imageBitmap);
+				$imageHeight = imagesy($imageBitmap);
+				$imageShort = min($imageWidth, $imageHeight);
+				$imageLong = max($imageWidth, $imageHeight);
+				$watermarkRatio = imagesx($watermarkBitmap) / imagesy($watermarkBitmap);
+
+				$newWatermarkWidth = null;
+				$newWatermarkHeight = null;
+
+				if ($arguments['watermarkWidth']) {
+					$newWidth = $arguments['watermarkWidth'];
+					$newWidthPercentage = $arguments['watermarkWidth'] / 100;
+					if ($arguments['watermarkWidthRelative'] == "width") {
+						$newWatermarkWidth = $imageWidth * $newWidthPercentage;
+					} else if ($arguments['watermarkWidthRelative'] == "height") {
+						$newWatermarkWidth = $imageHeight * $newWidthPercentage;
+					} else if ($arguments['watermarkWidthRelative'] == "short") {
+						$newWatermarkWidth = $imageShort * $newWidthPercentage;
+					} else if ($arguments['watermarkWidthRelative'] == "long") {
+						$newWatermarkWidth = $imageLong * $newWidthPercentage;
+					} else {
+						$newWatermarkWidth = $newWidth;
+					}
+				}
+				if ($arguments['watermarkHeight']) {
+					$newHeight = $arguments['watermarkHeight'];
+					$newHeightPercentage = $arguments['watermarkHeight'] / 100;
+					if ($arguments['watermarkHeightRelative'] == "width") {
+						$newWatermarkHeight = $imageWidth * $newHeightPercentage;
+					} else if ($arguments['watermarkHeightRelative'] == "height") {
+						$newWatermarkHeight = $imageHeight * $newHeightPercentage;
+					} else if ($arguments['watermarkHeightRelative'] == "short") {
+						$newWatermarkHeight = $imageShort * $newHeightPercentage;
+					} else if ($arguments['watermarkHeightRelative'] == "long") {
+						$newWatermarkHeight = $imageLong * $newHeightPercentage;
+					} else {
+						$newWatermarkHeight = $newHeight;
+					}
+				}
+
+				if ($newWatermarkWidth == null && $newWatermarkHeight == null) {
+					$newWatermarkWidth = imagesx($watermarkBitmap);
+					$newWatermarkHeight = imagesy($watermarkBitmap);
+				} else if ($newWatermarkWidth != null && $newWatermarkHeight == null) {
+					$newWatermarkHeight = $newWatermarkWidth / $watermarkRatio;
+				} else if ($newWatermarkWidth == null && $newWatermarkHeight != null) {
+					$newWatermarkWidth = $newWatermarkHeight * $watermarkRatio;
+				}
+
+				$watermarkResizedBitmap = imagecreatetruecolor($newWatermarkWidth, $newWatermarkHeight);
+				imagealphablending($watermarkResizedBitmap, true);
+				imagesavealpha($watermarkResizedBitmap, true);
+				imagefill($watermarkResizedBitmap, 0, 0, imagecolorallocatealpha($watermarkResizedBitmap, 0, 0, 0, 127));
+				imagecopyresampled($watermarkResizedBitmap, $watermarkBitmap, 0, 0, 0, 0, $newWatermarkWidth, $newWatermarkHeight, imagesx($watermarkBitmap), imagesy($watermarkBitmap));
+
+				$watermarkOpacityBitmap = imagecreatetruecolor($newWatermarkWidth, $newWatermarkHeight);
 				imagealphablending($watermarkOpacityBitmap, true);
 				imagesavealpha($watermarkOpacityBitmap, true);
 				imagefill($watermarkOpacityBitmap, 0, 0, imagecolorallocatealpha($watermarkOpacityBitmap, 0, 0, 0, 127));
 				
 				$opacity = $arguments['watermarkOpacity'] ?: 1;
 								
-				for ($x = 0; $x < imagesx($watermarkBitmap); $x++) {
-					for ($y = 0; $y < imagesy($watermarkBitmap); $y++) {
-						$color = imagecolorat($watermarkBitmap, $x, $y);
+				for ($x = 0; $x < imagesx($watermarkResizedBitmap); $x++) {
+					for ($y = 0; $y < imagesy($watermarkResizedBitmap); $y++) {
+						$color = imagecolorat($watermarkResizedBitmap, $x, $y);
 															
 						$rgba = array(
 							"red" => (($color >> 16) & 0xFF),
@@ -174,31 +239,43 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 				$backgroundcoloralpha = 127-($arguments['watermarkBackgroundOpacity'] ?: 0)*127;
 				
 				$offset = $arguments['watermarkOffset'] ?: 0;
+
+				$offsetPercentage = $arguments['watermarkOffset'] / 100;
+				if ($arguments['watermarkOffsetRelative'] == "width") {
+					$offset = $imageWidth * $offsetPercentage;
+				} else if ($arguments['watermarkOffsetRelative'] == "height") {
+					$offset = $imageHeight * $offsetPercentage;
+				} else if ($arguments['watermarkOffsetRelative'] == "short") {
+					$offset = $imageShort * $offsetPercentage;
+				} else if ($arguments['watermarkOffsetRelative'] == "long") {
+					$offset = $imageLong * $offsetPercentage;
+				}
+
 				
 				$topleftx = $offset;
 				$toplefty = $offset;
 				
 				if ($arguments['watermarkPositionHorizontal']) {
 					if ($arguments['watermarkPositionHorizontal'] == "center") {
-						$topleftx = (imagesx($imageBitmap)/2)-(imagesx($watermarkBitmap)/2);
+						$topleftx = (imagesx($imageBitmap)/2)-(imagesx($watermarkOpacityBitmap)/2);
 					} else if ($arguments['watermarkPositionHorizontal'] == "right") {
-						$topleftx = imagesx($imageBitmap)-imagesx($watermarkBitmap)-$offset;
+						$topleftx = imagesx($imageBitmap)-imagesx($watermarkOpacityBitmap)-$offset;
 					}
 				}
 				if ($arguments['watermarkPositionVertical']) {
 					if ($arguments['watermarkPositionVertical'] == "middle") {
-						$toplefty = (imagesy($imageBitmap)/2)-(imagesy($watermarkBitmap)/2);
+						$toplefty = (imagesy($imageBitmap)/2)-(imagesy($watermarkOpacityBitmap)/2);
 					} else if ($arguments['watermarkPositionVertical'] == "bottom") {
-						$toplefty = imagesy($imageBitmap)-imagesy($watermarkBitmap)-$offset;
+						$toplefty = imagesy($imageBitmap)-imagesy($watermarkOpacityBitmap)-$offset;
 					}
 				}
 							
 				$backgroundcolor = array(hexdec(substr($backgroundcolorhex, 0, 2)), hexdec(substr($backgroundcolorhex, 2, 2)), hexdec(substr($backgroundcolorhex, 4, 2)));
 				
 				$bgcolor = imagecolorallocatealpha($imageBitmap, $backgroundcolor[0], $backgroundcolor[1], $backgroundcolor[2], $backgroundcoloralpha);
-				imagefilledrectangle($imageBitmap, $topleftx, $toplefty, $topleftx+imagesx($watermarkBitmap), $toplefty+imagesy($watermarkBitmap), $bgcolor);
+				imagefilledrectangle($imageBitmap, $topleftx, $toplefty, $topleftx+imagesx($watermarkOpacityBitmap), $toplefty+imagesy($watermarkOpacityBitmap), $bgcolor);
 				
-				imagecopy($imageBitmap, $watermarkOpacityBitmap, $topleftx, $toplefty, 0, 0, imagesx($watermarkBitmap), imagesy($watermarkBitmap));
+				imagecopy($imageBitmap, $watermarkOpacityBitmap, $topleftx, $toplefty, 0, 0, imagesx($watermarkOpacityBitmap), imagesy($watermarkOpacityBitmap));
 				
 				$gfxConf = $GLOBALS['TYPO3_CONF_VARS']['GFX'];
 				$jpegQuality = MathUtility::forceIntegerInRange($gfxConf['jpg_quality'], 10, 100, 75);

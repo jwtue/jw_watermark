@@ -84,6 +84,31 @@ watermarkOffset
 ```
 Offset from the edge in pixels (horizontally and vertically)
 
+```
+watermarkOffsetRelative
+```
+If set, `watermarkOffset` is not interpreted as a pixel value, but as a percentage value (0-100) of the image dimensions. Possible values are `width`, `height`, `long`, `short`. They set the dimension that the relative value is based upon (width/height of the image, or the long/short side of the image).
+
+```
+watermarkWidth
+```
+Width of the watermark in pixels
+
+```
+watermarkWidthRelative
+```
+If set, `watermarkWidth` is not interpreted as a pixel value, but as a percentage value (0-100) of the image dimensions. Possible values are `width`, `height`, `long`, `short`. They set the dimension that the relative value is based upon (width/height of the image, or the long/short side of the image).
+
+```
+watermarkHeight
+```
+Height of the watermark in pixels
+
+```
+watermarkHeightRelative
+```
+If set, `watermarkHeight` is not interpreted as a pixel value, but as a percentage value (0-100) of the image dimensions. Possible values are `width`, `height`, `long`, `short`. They set the dimension that the relative value is based upon (width/height of the image, or the long/short side of the image).
+
 ## Restrictions
 
 Currently, only PNG watermarks have been tested, but JPG Watermarks may work as well. Support for SVG is unknown.
