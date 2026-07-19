@@ -2,22 +2,21 @@
 
 namespace JwTue\Watermark\ViewHelpers\Uri;
 
+use Psr\Http\Message\RequestInterface;
 use TYPO3\CMS\Core\Imaging\ImageManipulation\CropVariantCollection;
 use TYPO3\CMS\Core\Resource\Exception\ResourceDoesNotExistException;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
-use TYPO3\CMS\Extbase\Object\ObjectManager;
 use TYPO3\CMS\Extbase\Service\ImageService;
 use TYPO3\CMS\Core\Resource\FileInterface;
+use TYPO3\CMS\Core\Resource\ProcessedFileRepository;
+use TYPO3\CMS\Frontend\ContentObject\ContentObjectRenderer;
 use TYPO3Fluid\Fluid\Core\Rendering\RenderingContextInterface;
 use TYPO3Fluid\Fluid\Core\ViewHelper\AbstractViewHelper;
 use TYPO3Fluid\Fluid\Core\ViewHelper\Exception;
-use TYPO3Fluid\Fluid\Core\ViewHelper\Traits\CompileWithRenderStatic;
 use TYPO3\CMS\Core\Utility\MathUtility;
 
 class WatermarkedImageViewHelper extends AbstractViewHelper
 {
-    use CompileWithRenderStatic;
-
     /**
      * Initialize arguments
      */
@@ -55,30 +54,37 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
     }
 
     /**
-     * Resizes the image (if required) and returns its path. If the image was not resized, the path will be equal to $src
+     * Verkleinert das Bild (falls noetig), bringt das Wasserzeichen auf und liefert den Pfad.
      *
-     * @param array $arguments
-     * @param \Closure $renderChildrenClosure
-     * @param RenderingContextInterface $renderingContext
-     * @return string
+     * Frueher war das ein statisches renderStatic() zusammen mit dem Trait
+     * CompileWithRenderStatic. Beides ist in Fluid 5 (TYPO3 v14) entfernt und wird in
+     * Fluid 4 (TYPO3 v13) bereits als deprecated protokolliert. Ein normales render()
+     * funktioniert dagegen in Fluid 2, 4 und 5 gleichermassen.
+     *
      * @throws Exception
      */
-    public static function renderStatic(array $arguments, \Closure $renderChildrenClosure, RenderingContextInterface $renderingContext): string
-    {		
+    public function render(): string
+    {
+        $arguments = $this->arguments;
+        $renderingContext = $this->renderingContext;
+
 	    $src = $arguments['src'];
         $image = $arguments['image'];
         $treatIdAsReference = $arguments['treatIdAsReference'];
         $absolute = $arguments['absolute'];
 
         if (($src === '' && $image === null) || ($src !== '' && $image !== null)) {
-            throw new Exception($this->getExceptionMessage('You must either specify a string src or a File object.'), 1382284106);
+            throw new Exception(
+                self::getExceptionMessage('You must either specify a string src or a File object.', $renderingContext),
+                1382284106
+            );
         }
 
         try {
             $imageService = self::getImageService();
             $image = $imageService->getImage($src, $image, $treatIdAsReference);
 
-			$processedImage = self::processImage($image, $arguments, $imageService);
+			$processedImage = self::processImage($image, $arguments, $imageService, $renderingContext);
 
             return $imageService->getImageUri($processedImage, $absolute);
         } catch (ResourceDoesNotExistException $e) {
@@ -91,10 +97,16 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
             // thrown if file storage does not exist
             throw new Exception(self::getExceptionMessage($e->getMessage(), $renderingContext), 1709565155, $e);
         }
-        return '';
     }
 
-	public static function processImage(FileInterface $image, array $arguments, ImageService $imageService): FileInterface {		
+	/**
+	 * Wendet Groessenaenderung/Zuschnitt und anschliessend das Wasserzeichen an.
+	 *
+	 * $renderingContext ist optional und wird nur fuer aussagekraeftige Fehlermeldungen
+	 * gebraucht. Frueher fehlte der Parameter, wurde in den Catch-Bloecken aber verwendet —
+	 * die Fehlerbehandlung scheiterte dadurch an einer undefinierten Variablen.
+	 */
+	public static function processImage(FileInterface $image, array $arguments, ImageService $imageService, ?RenderingContextInterface $renderingContext = null): FileInterface {
 				
         $watermarkSrc = $arguments['watermarkSrc'];
         $watermarkImage = $arguments['watermarkImage'];
@@ -134,12 +146,23 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 		
 		$processedImage = $imageService->applyProcessingInstructions($image, $processingInstructions);
 		
-		$processedPath = $processedImage->getForLocalProcessing(false);
-		
-		$copyright = self::getCopyrightString($processedPath);
-		$sysConf = $GLOBALS['TYPO3_CONF_VARS']['SYS'];
-		
-		if (($processedImage->getMimeType() == "image/jpeg") && (($processedImage->usesOriginalFile()) || ($copyright == null) || ($copyright != $sysConf['sitename']))) {	
+		$mimeType = $processedImage->getMimeType();
+
+		// Wann muss gewaessert werden?
+		//
+		// TYPO3 rechnet die uebergebenen watermark*-Parameter in die Pruefsumme der
+		// verarbeiteten Datei ein (AbstractTask::getChecksumData() serialisiert die
+		// vollstaendige Konfiguration). Jede Wasserzeichen-Variante bekommt damit eine
+		// eigene Datei — wir muessen also nur wissen, ob TYPO3 sie gerade neu erzeugt hat:
+		//
+		//   isUpdated() === true   frisch verarbeitet, Wasserzeichen fehlt noch
+		//   isUpdated() === false  aus dem Cache, traegt es bereits
+		//
+		// usesOriginalFile() bedeutet, dass keine Groessenaenderung noetig war und TYPO3
+		// die Originaldatei zurueckgibt. Die duerfen wir nicht unveraendert ausliefern,
+		// also wird in diesem Fall immer gewaessert.
+		if (self::isSupportedMimeType($mimeType)
+			&& ($processedImage->usesOriginalFile() || $processedImage->isUpdated())) {
 		
 			try {
 				$watermark = $imageService->getImage($watermarkSrc, $watermarkImage, $watermarkTreatIdAsReference);
@@ -200,6 +223,11 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 				} else if ($newWatermarkWidth == null && $newWatermarkHeight != null) {
 					$newWatermarkWidth = $newWatermarkHeight * $watermarkRatio;
 				}
+
+				// Die Werte oben entstehen aus Multiplikationen und sind damit Fliesskomma.
+				// GD erwartet Ganzzahlen; seit PHP 8.1 ist die implizite Umwandlung deprecated.
+				$newWatermarkWidth = max(1, (int)round($newWatermarkWidth));
+				$newWatermarkHeight = max(1, (int)round($newWatermarkHeight));
 
 				$watermarkResizedBitmap = imagecreatetruecolor($newWatermarkWidth, $newWatermarkHeight);
 				imagealphablending($watermarkResizedBitmap, true);
@@ -270,27 +298,48 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 					}
 				}
 							
+				// Auch hier: Position und Offset koennen aus Prozentrechnung stammen.
+				$topleftx = (int)round($topleftx);
+				$toplefty = (int)round($toplefty);
+
 				$backgroundcolor = array(hexdec(substr($backgroundcolorhex, 0, 2)), hexdec(substr($backgroundcolorhex, 2, 2)), hexdec(substr($backgroundcolorhex, 4, 2)));
-				
-				$bgcolor = imagecolorallocatealpha($imageBitmap, $backgroundcolor[0], $backgroundcolor[1], $backgroundcolor[2], $backgroundcoloralpha);
+
+				$bgcolor = imagecolorallocatealpha($imageBitmap, $backgroundcolor[0], $backgroundcolor[1], $backgroundcolor[2], (int)round($backgroundcoloralpha));
 				imagefilledrectangle($imageBitmap, $topleftx, $toplefty, $topleftx+imagesx($watermarkOpacityBitmap), $toplefty+imagesy($watermarkOpacityBitmap), $bgcolor);
 				
 				imagecopy($imageBitmap, $watermarkOpacityBitmap, $topleftx, $toplefty, 0, 0, imagesx($watermarkOpacityBitmap), imagesy($watermarkOpacityBitmap));
 				
-				$gfxConf = $GLOBALS['TYPO3_CONF_VARS']['GFX'];
-				$jpegQuality = MathUtility::forceIntegerInRange($gfxConf['jpg_quality'], 10, 100, 75);
-				
-				$tmpname = tempnam(sys_get_temp_dir(), 'typo3watermark_'.rand());	
-				
-				imagejpeg($imageBitmap, $tmpname, $jpegQuality);
-				
-				self::setCopyrightString($tmpname, $sysConf['sitename']);
-					
-				if ($processedImage->usesOriginalFile()) {
+				$tmpname = tempnam(sys_get_temp_dir(), 'typo3watermark_'.rand());
+
+				if ($mimeType === self::MIME_PNG) {
+					// Transparenz erhalten: Beim Zusammensetzen muss Alpha-Blending an sein,
+					// beim Speichern dagegen aus — sonst schreibt GD den Alphakanal nicht mit.
+					imagealphablending($imageBitmap, false);
+					imagesavealpha($imageBitmap, true);
+					imagepng($imageBitmap, $tmpname);
+				} else {
+					$gfxConf = $GLOBALS['TYPO3_CONF_VARS']['GFX'];
+					$jpegQuality = MathUtility::forceIntegerInRange($gfxConf['jpg_quality'], 10, 100, 75);
+					imagejpeg($imageBitmap, $tmpname, $jpegQuality);
+				}
+
+				$wasUsingOriginalFile = $processedImage->usesOriginalFile();
+				if ($wasUsingOriginalFile) {
 					$processedImage->setName($processedImage->getTask()->getTargetFilename());
 				}
 				$processedImage->updateWithLocalFile($tmpname);
-					
+
+				// Der Core persistiert die verarbeitete Datei bereits in
+				// FileProcessingService::process() — also bevor wir sie hier veraendern.
+				// Ohne das folgende add() bliebe im Datensatz der Verweis auf die
+				// Originaldatei stehen; TYPO3 lieferte beim naechsten Aufruf wieder das
+				// Original, und das Wasserzeichen wuerde bei *jedem* Seitenaufruf neu
+				// berechnet. add() erkennt anhand von isPersisted() selbst, ob es einfuegen
+				// oder aktualisieren muss.
+				if ($wasUsingOriginalFile) {
+					GeneralUtility::makeInstance(ProcessedFileRepository::class)->add($processedImage);
+				}
+
 				@unlink($tmpname);
         } catch (ResourceDoesNotExistException $e) {
             // thrown if file does not exist
@@ -306,79 +355,25 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 		return $processedImage;				
 	}
 
-	const IPTC_ENCODING = "1#090";
-	const IPTC_COPYRIGHT_STRING = "2#116";
+	const MIME_JPEG = 'image/jpeg';
+	const MIME_PNG = 'image/png';
 
-	const IPTC_ENCODING_UTF8 = "\x1B%G";
-	
-	private static function setCopyrightString($file, $string) {
-		
-		$mode = 0;
-		$meta = array(
-			self::IPTC_ENCODING 		=> self::IPTC_ENCODING_UTF8,
-			self::IPTC_COPYRIGHT_STRING => $string
-		);	
-
-		$binary = "";
-        foreach($meta as $tag => $string)
-        {
-            $tag = explode("#", $tag);
-            $binary .= self::iptc_maketag($tag[0], $tag[1], $string);
-        }
-
-        $content = iptcembed($binary, $file, $mode); 
-		
-		if ($content !== false) {
-			if(file_exists($file)) unlink($file);
-
-			$fp = fopen($file, "w");
-			fwrite($fp, $content);
-			fclose($fp);
-		}
+	/**
+	 * Bildformate, auf die ein Wasserzeichen aufgebracht werden kann.
+	 *
+	 * Erweiterbar: Ein weiteres Format braucht hier einen Eintrag und im Schreibzweig
+	 * von processImage() den passenden image*()-Aufruf. Formatspezifische Metadaten sind
+	 * nicht mehr noetig — die Erkennung bereits gewaesserter Bilder laeuft ueber
+	 * ProcessedFile::isUpdated().
+	 */
+	private static function isSupportedMimeType(?string $mimeType): bool
+	{
+		return in_array($mimeType, [self::MIME_JPEG, self::MIME_PNG], true);
 	}
-	private static function getCopyrightString($file) {
-		if (!file_exists($file)) return null;
 
-		$meta = [];
-        $info = null;
-        $size = getimagesize($file, $info);
-
-        if (isset($info["APP13"])) {
-			$meta = iptcparse($info["APP13"]);
-			if ($meta === false) {
-				$meta = array();
-			}
-		}
-
-		return isset($meta[self::IPTC_COPYRIGHT_STRING]) ? $meta[self::IPTC_COPYRIGHT_STRING][0] : null;
-	}
-	
-	private static function iptc_maketag($rec, $data, $value)
+    protected static function getExceptionMessage(string $detailedMessage, ?RenderingContextInterface $renderingContext = null): string
     {
-        $length = strlen($value);
-        $retval = chr(0x1C) . chr($rec) . chr($data);
-
-        if($length < 0x8000)
-        {
-            $retval .= chr($length >> 8) .  chr($length & 0xFF);
-        }
-        else
-        {
-            $retval .= chr(0x80) . 
-                       chr(0x04) . 
-                       chr(($length >> 24) & 0xFF) . 
-                       chr(($length >> 16) & 0xFF) . 
-                       chr(($length >> 8) & 0xFF) . 
-                       chr($length & 0xFF);
-        }
-
-        return $retval . $value;            
-    }
-
-    protected static function getExceptionMessage(string $detailedMessage, RenderingContextInterface $renderingContext): string
-    {
-        /** @var RenderingContext $renderingContext */
-        $request = $renderingContext->getRequest();
+        $request = $renderingContext?->getRequest();
         if ($request instanceof RequestInterface) {
             $currentContentObject = $request->getAttribute('currentContentObject');
             if ($currentContentObject instanceof ContentObjectRenderer) {
