@@ -9,6 +9,7 @@ use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Extbase\Service\ImageService;
 use TYPO3\CMS\Core\Resource\FileInterface;
 use TYPO3\CMS\Core\Resource\ProcessedFileRepository;
+use TYPO3\CMS\Core\Resource\Processing\TaskTypeRegistry;
 use TYPO3\CMS\Frontend\ContentObject\ContentObjectRenderer;
 use TYPO3Fluid\Fluid\Core\Rendering\RenderingContextInterface;
 use TYPO3Fluid\Fluid\Core\ViewHelper\AbstractViewHelper;
@@ -311,21 +312,15 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 				
 				$tmpname = tempnam(sys_get_temp_dir(), 'typo3watermark_'.rand());
 
-				if ($mimeType === self::MIME_PNG) {
-					// Transparenz erhalten: Beim Zusammensetzen muss Alpha-Blending an sein,
-					// beim Speichern dagegen aus — sonst schreibt GD den Alphakanal nicht mit.
-					imagealphablending($imageBitmap, false);
-					imagesavealpha($imageBitmap, true);
-					imagepng($imageBitmap, $tmpname);
-				} else {
-					$gfxConf = $GLOBALS['TYPO3_CONF_VARS']['GFX'];
-					$jpegQuality = MathUtility::forceIntegerInRange($gfxConf['jpg_quality'], 10, 100, 75);
-					imagejpeg($imageBitmap, $tmpname, $jpegQuality);
-				}
+				self::writeImage($imageBitmap, $tmpname, $mimeType);
 
 				$wasUsingOriginalFile = $processedImage->usesOriginalFile();
 				if ($wasUsingOriginalFile) {
-					$processedImage->setName($processedImage->getTask()->getTargetFilename());
+					// Ohne Groessenaenderung liefert TYPO3 die Originaldatei zurueck. Deren
+					// Identifier ist leer, und updateWithLocalFile() wirft dann eine Ausnahme
+					// ("Cannot update original file!"). setName() setzt Name und Identifier
+					// auf eine Datei im Verarbeitungsordner und macht den Aufruf moeglich.
+					$processedImage->setName(self::getProcessingTask($processedImage)->getTargetFilename());
 				}
 				$processedImage->updateWithLocalFile($tmpname);
 
@@ -337,7 +332,7 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 				// berechnet. add() erkennt anhand von isPersisted() selbst, ob es einfuegen
 				// oder aktualisieren muss.
 				if ($wasUsingOriginalFile) {
-					GeneralUtility::makeInstance(ProcessedFileRepository::class)->add($processedImage);
+					self::persistProcessedFile($processedImage);
 				}
 
 				@unlink($tmpname);
@@ -357,18 +352,109 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 
 	const MIME_JPEG = 'image/jpeg';
 	const MIME_PNG = 'image/png';
+	const MIME_WEBP = 'image/webp';
+	const MIME_AVIF = 'image/avif';
 
 	/**
 	 * Bildformate, auf die ein Wasserzeichen aufgebracht werden kann.
 	 *
-	 * Erweiterbar: Ein weiteres Format braucht hier einen Eintrag und im Schreibzweig
-	 * von processImage() den passenden image*()-Aufruf. Formatspezifische Metadaten sind
-	 * nicht mehr noetig — die Erkennung bereits gewaesserter Bilder laeuft ueber
-	 * ProcessedFile::isUpdated().
+	 * Der Schluessel ist der MIME-Typ, der Wert die GD-Funktion zum Schreiben. Nicht jede
+	 * GD-Installation kann alle Formate — WebP und AVIF sind Build-abhaengig —, deshalb
+	 * wird die Verfuegbarkeit zur Laufzeit geprueft. Fehlt sie, wird das Bild unveraendert
+	 * durchgereicht statt eine Ausnahme auszuloesen.
+	 *
+	 * Bewusst nicht enthalten:
+	 * - GIF: palettenbasiert (max. 256 Farben), das Wasserzeichen wuerde sichtbar
+	 *   Farbstufen bilden. Ausserdem liest imagecreatefromstring() bei animierten GIFs
+	 *   nur das erste Einzelbild — die Animation ginge still verloren.
+	 * - SVG: Vektorformat, GD kann es nicht verarbeiten.
 	 */
+	private const WRITERS = [
+		self::MIME_JPEG => 'imagejpeg',
+		self::MIME_PNG  => 'imagepng',
+		self::MIME_WEBP => 'imagewebp',
+		self::MIME_AVIF => 'imageavif',
+	];
+
+	/** Formate mit Alphakanal — beim Schreiben muss die Transparenz erhalten bleiben. */
+	private const ALPHA_FORMATS = [self::MIME_PNG, self::MIME_WEBP, self::MIME_AVIF];
+
 	private static function isSupportedMimeType(?string $mimeType): bool
 	{
-		return in_array($mimeType, [self::MIME_JPEG, self::MIME_PNG], true);
+		return isset(self::WRITERS[$mimeType]) && function_exists(self::WRITERS[$mimeType]);
+	}
+
+	/**
+	 * Liefert die Verarbeitungs-Task zu einer verarbeiteten Datei.
+	 *
+	 * ProcessedFile::getTask() gibt es bis TYPO3 v13; in v14 ist die Methode entfernt.
+	 * Die TaskTypeRegistry kann die Task aber in allen drei Versionen aus Tasktyp und
+	 * Konfiguration erzeugen — beides liefert ProcessedFile weiterhin.
+	 */
+	private static function getProcessingTask($processedImage)
+	{
+		if (method_exists($processedImage, 'getTask')) {
+			return $processedImage->getTask();
+		}
+
+		return GeneralUtility::makeInstance(TaskTypeRegistry::class)->getTaskForType(
+			$processedImage->getTaskIdentifier(),
+			$processedImage,
+			$processedImage->getProcessingConfiguration()
+		);
+	}
+
+	/**
+	 * Traegt die veraenderte Datei in sys_file_processedfile ein.
+	 *
+	 * Ab TYPO3 v14 erwartet add() zusaetzlich die Task.
+	 */
+	private static function persistProcessedFile($processedImage): void
+	{
+		$repository = GeneralUtility::makeInstance(ProcessedFileRepository::class);
+		$parameterCount = (new \ReflectionMethod($repository, 'add'))->getNumberOfParameters();
+
+		if ($parameterCount > 1) {
+			$repository->add($processedImage, self::getProcessingTask($processedImage));
+			return;
+		}
+
+		$repository->add($processedImage);
+	}
+
+	/**
+	 * Schreibt das fertige Bild im Ursprungsformat.
+	 *
+	 * Die Qualitaetseinstellungen kommen aus der TYPO3-Konfiguration; webp_quality und
+	 * avif_quality gibt es erst ab v13, deshalb der Vorgabewert.
+	 */
+	private static function writeImage($imageBitmap, string $file, string $mimeType): void
+	{
+		if (in_array($mimeType, self::ALPHA_FORMATS, true)) {
+			// Beim Zusammensetzen muss Alpha-Blending an sein, beim Speichern dagegen aus —
+			// sonst schreibt GD den Alphakanal nicht mit.
+			imagealphablending($imageBitmap, false);
+			imagesavealpha($imageBitmap, true);
+		}
+
+		$gfxConf = $GLOBALS['TYPO3_CONF_VARS']['GFX'] ?? [];
+		$quality = static fn(string $key): int => MathUtility::forceIntegerInRange($gfxConf[$key] ?? 85, 10, 100, 85);
+
+		switch ($mimeType) {
+			case self::MIME_PNG:
+				// imagepng() erwartet als drittes Argument die zlib-Kompressionsstufe (0-9),
+				// keine Qualitaet. -1 laesst GD die Voreinstellung waehlen.
+				imagepng($imageBitmap, $file);
+				break;
+			case self::MIME_WEBP:
+				imagewebp($imageBitmap, $file, $quality('webp_quality'));
+				break;
+			case self::MIME_AVIF:
+				imageavif($imageBitmap, $file, $quality('avif_quality'));
+				break;
+			default:
+				imagejpeg($imageBitmap, $file, $quality('jpg_quality'));
+		}
 	}
 
     protected static function getExceptionMessage(string $detailedMessage, ?RenderingContextInterface $renderingContext = null): string

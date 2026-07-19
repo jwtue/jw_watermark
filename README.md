@@ -199,16 +199,37 @@ watermarkHeightRelative
 If set, `watermarkHeight` is not interpreted as a pixel value, but as a percentage value
 (0-100) of the image dimensions. Possible values are `width`, `height`, `long`, `short`.
 
-## Restrictions
+## Supported formats
 
-Watermarks are applied to **JPEG and PNG** images. Other formats (GIF, WebP, AVIF, SVG) are
-passed through unchanged — the image is still scaled and cropped, it just does not get a
-watermark.
+Watermarks are applied to **JPEG, PNG, WebP and AVIF**. The alpha channel is preserved for
+the formats that have one (PNG, WebP, AVIF).
 
-For PNG base images the alpha channel is preserved.
+WebP and AVIF depend on your GD build — the extension checks `imagewebp()` and `imageavif()`
+at runtime and passes the image through unchanged if the function is missing, rather than
+failing.
+
+Two things are worth knowing, because they are about TYPO3 and your image processor rather
+than about this extension:
+
+- **TYPO3 v12 does not list `webp` and `avif`** in `$GLOBALS['TYPO3_CONF_VARS']['GFX']['imagefile_ext']`;
+  v13 and v14 do. On v12, WebP images are therefore not scaled or cropped by TYPO3 — the
+  watermark is still applied, but at the original size. Add the extensions to
+  `imagefile_ext` if you need scaling there.
+- **Your image processor needs to understand the format.** GraphicsMagick 1.3, for instance,
+  handles WebP but not AVIF. Where the processor cannot scale, TYPO3 hands back the original
+  and the watermark is applied at that size.
+
+Deliberately not supported:
+
+- **GIF** — palette-based with at most 256 colours, so the watermark would band visibly. Worse,
+  only the first frame of an animated GIF would survive, silently dropping the animation.
+- **SVG** — a vector format that GD cannot process.
 
 As the watermark image itself, PNG is tested and recommended. JPG may work as well; SVG is
 untested.
+
+Quality is taken from the TYPO3 configuration: `jpg_quality`, `webp_quality` and
+`avif_quality` (the latter two exist from v13 on; the extension falls back to 85).
 
 ## How caching works
 
@@ -233,6 +254,10 @@ Practical consequences:
 - TYPO3 v12.4, v13.4 or v14
 - PHP 8.1 or newer
 - GD with support for the formats you use
+
+Tested by rendering the same template on TYPO3 12.4, 13.4 and 14.3 — all four formats as both
+tag and URI ViewHelper, `srcset`, attribute pass-through, and a second request confirming that
+nothing is regenerated.
 
 ## Issues and feature requests
 
