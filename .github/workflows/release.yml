@@ -50,32 +50,41 @@ jobs:
           files: build/jw_watermark_${{ steps.v.outputs.version }}.zip
           generate_release_notes: true
 
-      # --- Optional: publish to TER, only if the TYPO3_TER_TOKEN secret is set ---
+      # --- Optional: publish to TER, only if the TYPO3_API_TOKEN secret is set ---
+      # Add the secret at Settings -> Secrets and variables -> Actions:
+      #   TYPO3_API_TOKEN = the ACCESS token from extensions.typo3.org (not the refresh
+      #   token). Give it a long expiry and the scope extension:read,extension:write for
+      #   jw_watermark. When it eventually expires, renew it with `tailor ter:token:refresh`
+      #   and update the secret.
       - name: Check for TER token
         id: ter
         env:
-          TER_TOKEN: ${{ secrets.TYPO3_TER_TOKEN }}
+          TER_TOKEN: ${{ secrets.TYPO3_API_TOKEN }}
         run: |
-          if [ -n "$TER_TOKEN" ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"; else echo "enabled=false (no TYPO3_TER_TOKEN secret) — skipping TER publish"; fi
+          if [ -n "$TER_TOKEN" ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"; else echo "No TYPO3_API_TOKEN secret — skipping TER publish (GitHub release was still created)."; fi
 
       - name: Set up PHP
         if: steps.ter.outputs.enabled == 'true'
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
+          extensions: intl, mbstring, json, zip, curl
           tools: composer
 
       - name: Install tailor
         if: steps.ter.outputs.enabled == 'true'
         run: |
-          composer global require typo3/tailor
+          composer global require typo3/tailor --prefer-dist --no-progress
           echo "$(composer global config bin-dir --absolute)" >> "$GITHUB_PATH"
 
       - name: Publish to TER
         if: steps.ter.outputs.enabled == 'true'
         env:
-          # tailor reads the token from this variable and the extension key from
-          # composer.json (extra.typo3/cms.extension-key).
-          TYPO3_API_TOKEN: ${{ secrets.TYPO3_TER_TOKEN }}
+          # tailor reads the access token from this variable and the extension key from
+          # composer.json (extra.typo3/cms.extension-key). --artefact makes it publish the
+          # exact same zip that is attached to the GitHub release.
+          TYPO3_API_TOKEN: ${{ secrets.TYPO3_API_TOKEN }}
         run: |
-          tailor ter:publish --comment "Released via GitHub Actions" "${{ steps.v.outputs.version }}"
+          tailor ter:publish "${{ steps.v.outputs.version }}" \
+            --artefact "build/jw_watermark_${{ steps.v.outputs.version }}.zip" \
+            --comment "Released via GitHub Actions"
