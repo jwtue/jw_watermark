@@ -1,13 +1,21 @@
 name: Release
 
-# Triggered when you push a version tag, e.g. `git push origin v14.0.0`.
-# Builds the TER extension archive, attaches it to a GitHub Release, and — if a TER
-# token secret is configured — also publishes the version to the TYPO3 Extension
-# Repository.
+# On pushing a version tag (e.g. `git push origin v14.0.0`): build the TER archive,
+# attach it to a GitHub Release, and — if a TER token secret is configured — publish
+# the version to the TYPO3 Extension Repository.
+#
+# The workflow can also be started manually (Actions -> Release -> Run workflow) for a
+# given version. That only (re)publishes to TER — useful when the TER step failed or the
+# token had expired, without moving the already-published tag/release.
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to (re)publish to TER, e.g. 14.0.0 (its tag v<version> must exist)'
+        required: true
 
 permissions:
   contents: write   # required to create the GitHub Release
@@ -16,22 +24,31 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Derive version from tag
+      - name: Determine version and ref
         id: v
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+            REF="refs/tags/v${VERSION}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+            REF="${GITHUB_REF}"
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Releasing version $VERSION"
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION  (ref: $REF)"
 
-      - name: Verify ext_emconf version matches the tag
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.v.outputs.ref }}
+
+      - name: Verify ext_emconf version matches the version
         run: |
-          EMCONF="$(grep -oP "'version'\s*=>\s*'\K[^']+" ext_emconf.php)"
-          echo "ext_emconf.php: $EMCONF — tag: ${{ steps.v.outputs.version }}"
+          EMCONF="$(grep -oE "'version'[[:space:]]*=>[[:space:]]*'[^']+'" ext_emconf.php | grep -oE "[0-9]+\.[0-9]+\.[0-9]+")"
+          echo "ext_emconf.php: $EMCONF — release: ${{ steps.v.outputs.version }}"
           if [ "$EMCONF" != "${{ steps.v.outputs.version }}" ]; then
-            echo "::error::ext_emconf.php version ($EMCONF) does not match the tag (${{ steps.v.outputs.version }}). Bump ext_emconf.php before tagging."
+            echo "::error::ext_emconf.php version ($EMCONF) does not match the release (${{ steps.v.outputs.version }}). Bump ext_emconf.php before tagging."
             exit 1
           fi
 
@@ -45,23 +62,24 @@ jobs:
           unzip -l "build/jw_watermark_${{ steps.v.outputs.version }}.zip"
 
       - name: Create GitHub release
+        if: github.event_name == 'push'   # the manual run only refreshes TER
         uses: softprops/action-gh-release@v2
         with:
           files: build/jw_watermark_${{ steps.v.outputs.version }}.zip
           generate_release_notes: true
 
-      # --- Optional: publish to TER, only if the TYPO3_API_TOKEN secret is set ---
+      # --- Publish to TER, only if the TYPO3_API_TOKEN secret is set ---
       # Add the secret at Settings -> Secrets and variables -> Actions:
       #   TYPO3_API_TOKEN = the ACCESS token from extensions.typo3.org (not the refresh
       #   token). Give it a long expiry and the scope extension:read,extension:write for
-      #   jw_watermark. When it eventually expires, renew it with `tailor ter:token:refresh`
-      #   and update the secret.
+      #   jw_watermark. When it expires, renew it with `tailor ter:token:refresh` and
+      #   update the secret.
       - name: Check for TER token
         id: ter
         env:
           TER_TOKEN: ${{ secrets.TYPO3_API_TOKEN }}
         run: |
-          if [ -n "$TER_TOKEN" ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"; else echo "No TYPO3_API_TOKEN secret — skipping TER publish (GitHub release was still created)."; fi
+          if [ -n "$TER_TOKEN" ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"; else echo "No TYPO3_API_TOKEN secret — skipping TER publish."; fi
 
       - name: Set up PHP
         if: steps.ter.outputs.enabled == 'true'
@@ -81,10 +99,14 @@ jobs:
         if: steps.ter.outputs.enabled == 'true'
         env:
           # tailor reads the access token from this variable and the extension key from
-          # composer.json (extra.typo3/cms.extension-key). --artefact makes it publish the
-          # exact same zip that is attached to the GitHub release.
+          # composer.json (extra.typo3/cms.extension-key).
           TYPO3_API_TOKEN: ${{ secrets.TYPO3_API_TOKEN }}
         run: |
+          # Publish the clean archive contents via --path (a directory), which is the
+          # documented, working form. --artefact was avoided because tailor then looks for
+          # ext_emconf.php in the working folder and fails ("No ext_emconf.php file found").
+          rm -rf ter-package && mkdir ter-package
+          unzip -q "build/jw_watermark_${{ steps.v.outputs.version }}.zip" -d ter-package
           tailor ter:publish "${{ steps.v.outputs.version }}" \
-            --artefact "build/jw_watermark_${{ steps.v.outputs.version }}.zip" \
+            --path ter-package \
             --comment "Released via GitHub Actions"
