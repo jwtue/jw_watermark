@@ -1,0 +1,7 @@
+# Files excluded from the distributed extension archive (TER ZIP / git archive).
+# `git archive` and the release workflow honour these export-ignore rules, so the
+# package contains only what a TYPO3 installation needs — no CI/dev metadata.
+/.github        export-ignore
+/.gitattributes export-ignore
+/.gitignore     export-ignore
+/AGENTS.md      export-ignore

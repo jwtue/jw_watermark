@@ -1,0 +1,81 @@
+name: Release
+
+# Triggered when you push a version tag, e.g. `git push origin v14.0.0`.
+# Builds the TER extension archive, attaches it to a GitHub Release, and — if a TER
+# token secret is configured — also publishes the version to the TYPO3 Extension
+# Repository.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # required to create the GitHub Release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Derive version from tag
+        id: v
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing version $VERSION"
+
+      - name: Verify ext_emconf version matches the tag
+        run: |
+          EMCONF="$(grep -oP "'version'\s*=>\s*'\K[^']+" ext_emconf.php)"
+          echo "ext_emconf.php: $EMCONF — tag: ${{ steps.v.outputs.version }}"
+          if [ "$EMCONF" != "${{ steps.v.outputs.version }}" ]; then
+            echo "::error::ext_emconf.php version ($EMCONF) does not match the tag (${{ steps.v.outputs.version }}). Bump ext_emconf.php before tagging."
+            exit 1
+          fi
+
+      - name: Build extension archive
+        run: |
+          mkdir -p build
+          # git archive honours the export-ignore rules in .gitattributes, so the ZIP
+          # contains only the files a TYPO3 installation needs, with them at the archive
+          # root (as TER expects).
+          git archive --format=zip -o "build/jw_watermark_${{ steps.v.outputs.version }}.zip" HEAD
+          unzip -l "build/jw_watermark_${{ steps.v.outputs.version }}.zip"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/jw_watermark_${{ steps.v.outputs.version }}.zip
+          generate_release_notes: true
+
+      # --- Optional: publish to TER, only if the TYPO3_TER_TOKEN secret is set ---
+      - name: Check for TER token
+        id: ter
+        env:
+          TER_TOKEN: ${{ secrets.TYPO3_TER_TOKEN }}
+        run: |
+          if [ -n "$TER_TOKEN" ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"; else echo "enabled=false (no TYPO3_TER_TOKEN secret) — skipping TER publish"; fi
+
+      - name: Set up PHP
+        if: steps.ter.outputs.enabled == 'true'
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: composer
+
+      - name: Install tailor
+        if: steps.ter.outputs.enabled == 'true'
+        run: |
+          composer global require typo3/tailor
+          echo "$(composer global config bin-dir --absolute)" >> "$GITHUB_PATH"
+
+      - name: Publish to TER
+        if: steps.ter.outputs.enabled == 'true'
+        env:
+          # tailor reads the token from this variable and the extension key from
+          # composer.json (extra.typo3/cms.extension-key).
+          TYPO3_API_TOKEN: ${{ secrets.TYPO3_TER_TOKEN }}
+        run: |
+          tailor ter:publish --comment "Released via GitHub Actions" "${{ steps.v.outputs.version }}"
