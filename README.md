@@ -259,6 +259,17 @@ Tested by rendering the same template on TYPO3 12.4, 13.4 and 14.3 — all four 
 tag and URI ViewHelper, `srcset`, attribute pass-through, and a second request confirming that
 nothing is regenerated.
 
+## Development notes
+
+The original extension — the watermark compositing and the ViewHelpers — was written by hand,
+without AI assistance.
+
+Later development was carried out with [Claude Code](https://www.claude.com/product/claude-code):
+the TYPO3 v12 port, PNG/WebP/AVIF support, the switch to `ProcessedFile::isUpdated()` for cache
+detection, TYPO3 v13/v14 compatibility, and this documentation. All changes were reviewed and
+tested against running TYPO3 installations before release (see [AGENTS.md](AGENTS.md) for how the
+repository is set up for that work).
+
 ## Issues and feature requests
 
 Please report issues and request features at https://github.com/jwtue/jw_watermark/issues.

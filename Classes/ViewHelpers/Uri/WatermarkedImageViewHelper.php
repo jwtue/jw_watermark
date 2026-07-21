@@ -55,12 +55,11 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
     }
 
     /**
-     * Verkleinert das Bild (falls noetig), bringt das Wasserzeichen auf und liefert den Pfad.
+     * Resizes the image (if required), applies the watermark and returns the path.
      *
-     * Frueher war das ein statisches renderStatic() zusammen mit dem Trait
-     * CompileWithRenderStatic. Beides ist in Fluid 5 (TYPO3 v14) entfernt und wird in
-     * Fluid 4 (TYPO3 v13) bereits als deprecated protokolliert. Ein normales render()
-     * funktioniert dagegen in Fluid 2, 4 und 5 gleichermassen.
+     * This used to be a static renderStatic() together with the CompileWithRenderStatic
+     * trait. Both are removed in Fluid 5 (TYPO3 v14) and already logged as deprecated in
+     * Fluid 4 (TYPO3 v13). A regular render() works identically in Fluid 2, 4 and 5.
      *
      * @throws Exception
      */
@@ -101,11 +100,11 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
     }
 
 	/**
-	 * Wendet Groessenaenderung/Zuschnitt und anschliessend das Wasserzeichen an.
+	 * Applies resizing/cropping and then the watermark.
 	 *
-	 * $renderingContext ist optional und wird nur fuer aussagekraeftige Fehlermeldungen
-	 * gebraucht. Frueher fehlte der Parameter, wurde in den Catch-Bloecken aber verwendet —
-	 * die Fehlerbehandlung scheiterte dadurch an einer undefinierten Variablen.
+	 * $renderingContext is optional and only used for meaningful error messages. The
+	 * parameter used to be missing while still being referenced in the catch blocks, so
+	 * error handling failed on an undefined variable.
 	 */
 	public static function processImage(FileInterface $image, array $arguments, ImageService $imageService, ?RenderingContextInterface $renderingContext = null): FileInterface {
 				
@@ -149,19 +148,18 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 		
 		$mimeType = $processedImage->getMimeType();
 
-		// Wann muss gewaessert werden?
+		// When does the watermark have to be applied?
 		//
-		// TYPO3 rechnet die uebergebenen watermark*-Parameter in die Pruefsumme der
-		// verarbeiteten Datei ein (AbstractTask::getChecksumData() serialisiert die
-		// vollstaendige Konfiguration). Jede Wasserzeichen-Variante bekommt damit eine
-		// eigene Datei — wir muessen also nur wissen, ob TYPO3 sie gerade neu erzeugt hat:
+		// TYPO3 folds the given watermark* parameters into the checksum of the processed
+		// file (AbstractTask::getChecksumData() serialises the full configuration). Every
+		// watermark variant therefore gets its own file — so all we need to know is whether
+		// TYPO3 has just (re-)generated it:
 		//
-		//   isUpdated() === true   frisch verarbeitet, Wasserzeichen fehlt noch
-		//   isUpdated() === false  aus dem Cache, traegt es bereits
+		//   isUpdated() === true   freshly processed, watermark not applied yet
+		//   isUpdated() === false  served from cache, already carries it
 		//
-		// usesOriginalFile() bedeutet, dass keine Groessenaenderung noetig war und TYPO3
-		// die Originaldatei zurueckgibt. Die duerfen wir nicht unveraendert ausliefern,
-		// also wird in diesem Fall immer gewaessert.
+		// usesOriginalFile() means no resizing was necessary and TYPO3 returns the original
+		// file. We must not deliver that unchanged, so in this case we always watermark.
 		if (self::isSupportedMimeType($mimeType)
 			&& ($processedImage->usesOriginalFile() || $processedImage->isUpdated())) {
 		
@@ -225,8 +223,8 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 					$newWatermarkWidth = $newWatermarkHeight * $watermarkRatio;
 				}
 
-				// Die Werte oben entstehen aus Multiplikationen und sind damit Fliesskomma.
-				// GD erwartet Ganzzahlen; seit PHP 8.1 ist die implizite Umwandlung deprecated.
+				// The values above come from multiplications and are therefore floats.
+				// GD expects integers; the implicit conversion is deprecated since PHP 8.1.
 				$newWatermarkWidth = max(1, (int)round($newWatermarkWidth));
 				$newWatermarkHeight = max(1, (int)round($newWatermarkHeight));
 
@@ -299,7 +297,7 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 					}
 				}
 							
-				// Auch hier: Position und Offset koennen aus Prozentrechnung stammen.
+				// Again: position and offset may result from percentage calculations.
 				$topleftx = (int)round($topleftx);
 				$toplefty = (int)round($toplefty);
 
@@ -316,21 +314,20 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 
 				$wasUsingOriginalFile = $processedImage->usesOriginalFile();
 				if ($wasUsingOriginalFile) {
-					// Ohne Groessenaenderung liefert TYPO3 die Originaldatei zurueck. Deren
-					// Identifier ist leer, und updateWithLocalFile() wirft dann eine Ausnahme
-					// ("Cannot update original file!"). setName() setzt Name und Identifier
-					// auf eine Datei im Verarbeitungsordner und macht den Aufruf moeglich.
+					// Without resizing, TYPO3 returns the original file, whose identifier is
+					// empty; updateWithLocalFile() then throws ("Cannot update original
+					// file!"). setName() sets name and identifier to a file in the processing
+					// folder and makes the call possible.
 					$processedImage->setName(self::getProcessingTask($processedImage)->getTargetFilename());
 				}
 				$processedImage->updateWithLocalFile($tmpname);
 
-				// Der Core persistiert die verarbeitete Datei bereits in
-				// FileProcessingService::process() — also bevor wir sie hier veraendern.
-				// Ohne das folgende add() bliebe im Datensatz der Verweis auf die
-				// Originaldatei stehen; TYPO3 lieferte beim naechsten Aufruf wieder das
-				// Original, und das Wasserzeichen wuerde bei *jedem* Seitenaufruf neu
-				// berechnet. add() erkennt anhand von isPersisted() selbst, ob es einfuegen
-				// oder aktualisieren muss.
+				// The core already persists the processed file in
+				// FileProcessingService::process() — i.e. before we modify it here. Without
+				// the add() below, the record would keep pointing at the original file;
+				// TYPO3 would return the original again on the next request and the watermark
+				// would be recomputed on *every* page load. add() decides on its own, via
+				// isPersisted(), whether to insert or update.
 				if ($wasUsingOriginalFile) {
 					self::persistProcessedFile($processedImage);
 				}
@@ -356,18 +353,18 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 	const MIME_AVIF = 'image/avif';
 
 	/**
-	 * Bildformate, auf die ein Wasserzeichen aufgebracht werden kann.
+	 * Image formats a watermark can be applied to.
 	 *
-	 * Der Schluessel ist der MIME-Typ, der Wert die GD-Funktion zum Schreiben. Nicht jede
-	 * GD-Installation kann alle Formate — WebP und AVIF sind Build-abhaengig —, deshalb
-	 * wird die Verfuegbarkeit zur Laufzeit geprueft. Fehlt sie, wird das Bild unveraendert
-	 * durchgereicht statt eine Ausnahme auszuloesen.
+	 * The key is the MIME type, the value the GD function used to write it. Not every GD
+	 * build supports all formats — WebP and AVIF are build-dependent — so availability is
+	 * checked at runtime. If a format cannot be written, the image is passed through
+	 * unchanged instead of throwing an exception.
 	 *
-	 * Bewusst nicht enthalten:
-	 * - GIF: palettenbasiert (max. 256 Farben), das Wasserzeichen wuerde sichtbar
-	 *   Farbstufen bilden. Ausserdem liest imagecreatefromstring() bei animierten GIFs
-	 *   nur das erste Einzelbild — die Animation ginge still verloren.
-	 * - SVG: Vektorformat, GD kann es nicht verarbeiten.
+	 * Deliberately excluded:
+	 * - GIF: palette-based (max. 256 colors), the watermark would produce visible banding.
+	 *   Also, imagecreatefromstring() only reads the first frame of an animated GIF — the
+	 *   animation would be lost silently.
+	 * - SVG: vector format, GD cannot process it.
 	 */
 	private const WRITERS = [
 		self::MIME_JPEG => 'imagejpeg',
@@ -376,7 +373,7 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 		self::MIME_AVIF => 'imageavif',
 	];
 
-	/** Formate mit Alphakanal — beim Schreiben muss die Transparenz erhalten bleiben. */
+	/** Formats with an alpha channel — transparency must be preserved when writing. */
 	private const ALPHA_FORMATS = [self::MIME_PNG, self::MIME_WEBP, self::MIME_AVIF];
 
 	private static function isSupportedMimeType(?string $mimeType): bool
@@ -385,11 +382,11 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 	}
 
 	/**
-	 * Liefert die Verarbeitungs-Task zu einer verarbeiteten Datei.
+	 * Returns the processing task for a processed file.
 	 *
-	 * ProcessedFile::getTask() gibt es bis TYPO3 v13; in v14 ist die Methode entfernt.
-	 * Die TaskTypeRegistry kann die Task aber in allen drei Versionen aus Tasktyp und
-	 * Konfiguration erzeugen — beides liefert ProcessedFile weiterhin.
+	 * ProcessedFile::getTask() exists up to TYPO3 v13; in v14 the method is removed. The
+	 * TaskTypeRegistry can, however, build the task in all three versions from the task type
+	 * and configuration — both of which ProcessedFile still provides.
 	 */
 	private static function getProcessingTask($processedImage)
 	{
@@ -405,9 +402,9 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 	}
 
 	/**
-	 * Traegt die veraenderte Datei in sys_file_processedfile ein.
+	 * Registers the modified file in sys_file_processedfile.
 	 *
-	 * Ab TYPO3 v14 erwartet add() zusaetzlich die Task.
+	 * As of TYPO3 v14, add() additionally expects the task.
 	 */
 	private static function persistProcessedFile($processedImage): void
 	{
@@ -423,16 +420,16 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 	}
 
 	/**
-	 * Schreibt das fertige Bild im Ursprungsformat.
+	 * Writes the finished image in its original format.
 	 *
-	 * Die Qualitaetseinstellungen kommen aus der TYPO3-Konfiguration; webp_quality und
-	 * avif_quality gibt es erst ab v13, deshalb der Vorgabewert.
+	 * The quality settings come from the TYPO3 configuration; webp_quality and avif_quality
+	 * only exist from v13 on, hence the default value.
 	 */
 	private static function writeImage($imageBitmap, string $file, string $mimeType): void
 	{
 		if (in_array($mimeType, self::ALPHA_FORMATS, true)) {
-			// Beim Zusammensetzen muss Alpha-Blending an sein, beim Speichern dagegen aus —
-			// sonst schreibt GD den Alphakanal nicht mit.
+			// Alpha blending must be on while compositing but off when saving —
+			// otherwise GD does not write the alpha channel.
 			imagealphablending($imageBitmap, false);
 			imagesavealpha($imageBitmap, true);
 		}
@@ -442,8 +439,8 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 
 		switch ($mimeType) {
 			case self::MIME_PNG:
-				// imagepng() erwartet als drittes Argument die zlib-Kompressionsstufe (0-9),
-				// keine Qualitaet. -1 laesst GD die Voreinstellung waehlen.
+				// imagepng()'s third argument is the zlib compression level (0-9), not a
+				// quality value. Omitting it lets GD choose its default.
 				imagepng($imageBitmap, $file);
 				break;
 			case self::MIME_WEBP:

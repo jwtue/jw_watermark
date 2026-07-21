@@ -117,12 +117,12 @@ final class WatermarkedImageViewHelper extends AbstractTagBasedViewHelper
     {
         parent::initializeArguments();
 
-        // Hier standen frueher registerUniversalTagAttributes() sowie registerTagAttribute()
-        // fuer alt, ismap, longdesc, usemap, loading und decoding. Beide Methoden sind in
-        // Fluid 5 (TYPO3 v14) entfernt. Sie werden auch nicht gebraucht: initialize() der
-        // Basisklasse reicht alle nicht deklarierten Attribute an den Tag durch — in
-        // Fluid 2, 4 und 5 gleichermassen. Der Core-ViewHelper f:image macht es seit v13
-        // ebenso. Beliebige HTML-Attribute funktionieren damit unveraendert weiter.
+        // This used to call registerUniversalTagAttributes() and registerTagAttribute()
+        // for alt, ismap, longdesc, usemap, loading and decoding. Both methods are removed
+        // in Fluid 5 (TYPO3 v14). They are not needed either: the base class's initialize()
+        // passes all undeclared attributes through to the tag — identically in Fluid 2, 4
+        // and 5. The core f:image ViewHelper does the same since v13. Arbitrary HTML
+        // attributes therefore keep working unchanged.
 
         $this->registerArgument('src', 'string', 'a path to a file, a combined FAL identifier or an uid (int). If $treatIdAsReference is set, the integer is considered the uid of the sys_file_reference record. If you already got a FAL object, consider using the $image parameter instead', false, '');
         $this->registerArgument('treatIdAsReference', 'bool', 'given src argument is a sys_file_reference record', false, false);
@@ -204,18 +204,18 @@ final class WatermarkedImageViewHelper extends AbstractTagBasedViewHelper
             $this->tag->addAttribute('width', $processedImage->getProperty('width'));
             $this->tag->addAttribute('height', $processedImage->getProperty('height'));
 
-            // alt und title sind keine deklarierten Argumente mehr, sondern kommen als
-            // zusaetzliche Tag-Attribute an. Deshalb wird hier $this->additionalArguments
-            // ausgewertet statt $this->arguments — analog zum Core-ViewHelper f:image ab v13.
+            // alt and title are no longer declared arguments; they arrive as additional tag
+            // attributes. That is why $this->additionalArguments is evaluated here instead
+            // of $this->arguments — like the core f:image ViewHelper since v13.
             if (isset($this->additionalArguments['alt']) && $this->additionalArguments['alt'] === '') {
-                // Ein bewusst leeres alt bleibt leer: So laesst sich das Bild vor
-                // Screenreadern verbergen, was der Barrierefreiheit dient.
+                // A deliberately empty alt stays empty: this lets the image be hidden from
+                // screen readers, which aids accessibility.
                 $this->tag->addAttribute('alt', '');
             } elseif (!isset($this->additionalArguments['alt'])) {
-                // alt ist fuer valides HTML Pflicht — ersatzweise die Bildeigenschaft nutzen.
+                // alt is mandatory for valid HTML — fall back to the image property.
                 $this->tag->addAttribute('alt', $image->hasProperty('alternative') ? $image->getProperty('alternative') : '');
             }
-            // title nur aus der Bildeigenschaft ergaenzen, wenn es nicht gesetzt wurde.
+            // Only add title from the image property if it was not set.
             if (!isset($this->additionalArguments['title'])) {
                 $title = trim((string)($image->hasProperty('title') ? $image->getProperty('title') : ''));
                 if ($title !== '') {
