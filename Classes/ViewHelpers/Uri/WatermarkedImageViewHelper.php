@@ -37,7 +37,7 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
         $this->registerArgument('maxWidth', 'int', 'maximum width of the image');
         $this->registerArgument('maxHeight', 'int', 'maximum height of the image');
         $this->registerArgument('absolute', 'bool', 'Force absolute URL', false, false);
-		
+
         $this->registerArgument('watermarkSrc', 'string', 'watermarkSrc');
         $this->registerArgument('watermarkTreatIdAsReference', 'bool', 'given watermarkSrc argument is a sys_file_reference record', false, false);
         $this->registerArgument('watermarkImage', 'object', 'watermarkImage');
@@ -107,7 +107,7 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 	 * error handling failed on an undefined variable.
 	 */
 	public static function processImage(FileInterface $image, array $arguments, ImageService $imageService, ?RenderingContextInterface $renderingContext = null): FileInterface {
-				
+
         $watermarkSrc = $arguments['watermarkSrc'];
         $watermarkImage = $arguments['watermarkImage'];
         $watermarkTreatIdAsReference = $arguments['watermarkTreatIdAsReference'];
@@ -143,9 +143,13 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 			'watermarkHeight' => $arguments['watermarkHeight'],
 			'watermarkHeightRelative' => $arguments['watermarkHeightRelative']
 		];
-		
+
+    if (!empty($arguments['fileExtension'])) {
+        $processingInstructions['fileExtension'] = $arguments['fileExtension'];
+    }
+
 		$processedImage = $imageService->applyProcessingInstructions($image, $processingInstructions);
-		
+
 		$mimeType = $processedImage->getMimeType();
 
 		// When does the watermark have to be applied?
@@ -162,14 +166,14 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 		// file. We must not deliver that unchanged, so in this case we always watermark.
 		if (self::isSupportedMimeType($mimeType)
 			&& ($processedImage->usesOriginalFile() || $processedImage->isUpdated())) {
-		
+
 			try {
 				$watermark = $imageService->getImage($watermarkSrc, $watermarkImage, $watermarkTreatIdAsReference);
-				
+
 				$imageBitmap = imagecreatefromstring($processedImage->getContents());
 				imagealphablending($imageBitmap, true);
 				imagesavealpha($imageBitmap, true);
-				
+
 				$watermarkBitmap = imagecreatefromstring($watermark->getContents());
 				imagealphablending($watermarkBitmap, true);
 				imagesavealpha($watermarkBitmap, true);
@@ -238,13 +242,13 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 				imagealphablending($watermarkOpacityBitmap, true);
 				imagesavealpha($watermarkOpacityBitmap, true);
 				imagefill($watermarkOpacityBitmap, 0, 0, imagecolorallocatealpha($watermarkOpacityBitmap, 0, 0, 0, 127));
-				
+
 				$opacity = $arguments['watermarkOpacity'] ?: 1;
-								
+
 				for ($x = 0; $x < imagesx($watermarkResizedBitmap); $x++) {
 					for ($y = 0; $y < imagesy($watermarkResizedBitmap); $y++) {
 						$color = imagecolorat($watermarkResizedBitmap, $x, $y);
-															
+
 						$rgba = array(
 							"red" => (($color >> 16) & 0xFF),
 							"green" => (($color >> 8) & 0xFF),
@@ -252,19 +256,19 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 							"alpha" => (($color & 0x7F000000) >> 24)
 						);
 
-					
+
 						$rgba['alpha'] = 127-$rgba['alpha'];
 						$rgba['alpha'] *= $opacity;
 						$rgba['alpha'] = 127-$rgba['alpha'];
-						
+
 						$color = imagecolorallocatealpha($watermarkOpacityBitmap, $rgba['red'], $rgba['green'], $rgba['blue'], $rgba['alpha']);
 						imagesetpixel($watermarkOpacityBitmap, $x, $y, $color);
 					}
 				}
-				
+
 				$backgroundcolorhex = $arguments['watermarkBackgroundColor'] ?: "000000";
 				$backgroundcoloralpha = 127-($arguments['watermarkBackgroundOpacity'] ?: 0)*127;
-				
+
 				$offset = $arguments['watermarkOffset'] ?: 0;
 
 				$offsetPercentage = $arguments['watermarkOffset'] / 100;
@@ -278,10 +282,10 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 					$offset = $imageLong * $offsetPercentage;
 				}
 
-				
+
 				$topleftx = $offset;
 				$toplefty = $offset;
-				
+
 				if ($arguments['watermarkPositionHorizontal']) {
 					if ($arguments['watermarkPositionHorizontal'] == "center") {
 						$topleftx = (imagesx($imageBitmap)/2)-(imagesx($watermarkOpacityBitmap)/2);
@@ -296,7 +300,7 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 						$toplefty = imagesy($imageBitmap)-imagesy($watermarkOpacityBitmap)-$offset;
 					}
 				}
-							
+
 				// Again: position and offset may result from percentage calculations.
 				$topleftx = (int)round($topleftx);
 				$toplefty = (int)round($toplefty);
@@ -305,9 +309,9 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 
 				$bgcolor = imagecolorallocatealpha($imageBitmap, $backgroundcolor[0], $backgroundcolor[1], $backgroundcolor[2], (int)round($backgroundcoloralpha));
 				imagefilledrectangle($imageBitmap, $topleftx, $toplefty, $topleftx+imagesx($watermarkOpacityBitmap), $toplefty+imagesy($watermarkOpacityBitmap), $bgcolor);
-				
+
 				imagecopy($imageBitmap, $watermarkOpacityBitmap, $topleftx, $toplefty, 0, 0, imagesx($watermarkOpacityBitmap), imagesy($watermarkOpacityBitmap));
-				
+
 				$tmpname = tempnam(sys_get_temp_dir(), 'typo3watermark_'.rand());
 
 				self::writeImage($imageBitmap, $tmpname, $mimeType);
@@ -344,7 +348,7 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
             throw new Exception(self::getExceptionMessage($e->getMessage(), $renderingContext), 1709565158, $e);
         }
 		}
-		return $processedImage;				
+		return $processedImage;
 	}
 
 	const MIME_JPEG = 'image/jpeg';
