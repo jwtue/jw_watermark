@@ -138,21 +138,27 @@ final class WatermarkedImageViewHelper extends AbstractTagBasedViewHelper
         $this->registerArgument('maxWidth', 'int', 'maximum width of the image');
         $this->registerArgument('maxHeight', 'int', 'maximum height of the image');
         $this->registerArgument('absolute', 'bool', 'Force absolute URL', false, false);
-		
+
         $this->registerArgument('watermarkSrc', 'string', 'watermarkSrc');
         $this->registerArgument('watermarkTreatIdAsReference', 'bool', 'given watermarkSrc argument is a sys_file_reference record', false, false);
         $this->registerArgument('watermarkImage', 'object', 'watermarkImage');
         $this->registerArgument('watermarkOpacity', 'string', 'opacity value for the watermark image (0=fully transparent, 1=fully opaque)');
         $this->registerArgument('watermarkBackgroundColor', 'string', 'hex code for the background color of the watermark');
         $this->registerArgument('watermarkBackgroundOpacity', 'string', 'opacity value for the background color (0=fully transparent, 1=fully opaque)');
-        $this->registerArgument('watermarkOffset', 'int', 'offset from the edge in pixels. If watermarkOffsetRelative is set, this is interpreted as a percentage value of the image', false, 0);
-		$this->registerArgument('watermarkOffsetRelative', 'string', 'Interpret watermark offset relative to image dimension (values: width, height, short, long). Default: none', false, false);
+
+        $this->registerArgument('watermarkOffset', 'int', 'offset from the edge (X+Y) in pixels. Overrules both watermarkOffsetX and watermarkOffsetY. If watermarkOffsetRelative/watermarkOffsetXRelative/watermarkOffsetYRelative is set, this is interpreted as a percentage value of the image', false, null);
+        $this->registerArgument('watermarkOffsetRelative', 'string', 'Interpret watermark offset relative to image dimension (values: width, height, short, long). Default: none', false, false);
+        $this->registerArgument('watermarkOffsetX', 'int', 'offset from the X-edge in pixels. If watermarkOffsetXRelative is set, this is interpreted as a percentage value of the image', false, null);
+        $this->registerArgument('watermarkOffsetY', 'int', 'offset from the Y-edge in pixels. If watermarkOffsetYRelative is set, this is interpreted as a percentage value of the image', false, null);
+        $this->registerArgument('watermarkOffsetXRelative', 'string', 'Interpret watermark X-offset relative to image dimension (values: width, height, short, long). Default: none', false, false);
+        $this->registerArgument('watermarkOffsetYRelative', 'string', 'Interpret watermark Y-offset relative to image dimension (values: width, height, short, long). Default: none', false, false);
+
         $this->registerArgument('watermarkPositionHorizontal', 'string', 'horizontal position in the image (left/center/right)');
         $this->registerArgument('watermarkPositionVertical', 'string', 'vertical position in the image (top/middle/bottom)');
-		$this->registerArgument('watermarkWidth', 'int', 'Water mark width in pixels. If watermarkWidthRelative is set, this is interpreted as a percentage value of the image.', false, false);
-		$this->registerArgument('watermarkHeight', 'int', 'Water mark height in pixels. If watermarkHeightRelative is set, this is interpreted as a percentage value of the image.', false, false);
-		$this->registerArgument('watermarkWidthRelative', 'string', 'Interpret watermark width relative to image dimension (values: width, height, short, long). Default: none', false, false);
-		$this->registerArgument('watermarkHeightRelative', 'string', 'Interpret watermark width relative to image dimension (values: width, height, short, long). Default: none', false, false);
+		    $this->registerArgument('watermarkWidth', 'int', 'Water mark width in pixels. If watermarkWidthRelative is set, this is interpreted as a percentage value of the image.', false, false);
+		    $this->registerArgument('watermarkHeight', 'int', 'Water mark height in pixels. If watermarkHeightRelative is set, this is interpreted as a percentage value of the image.', false, false);
+		    $this->registerArgument('watermarkWidthRelative', 'string', 'Interpret watermark width relative to image dimension (values: width, height, short, long). Default: none', false, false);
+		    $this->registerArgument('watermarkHeightRelative', 'string', 'Interpret watermark width relative to image dimension (values: width, height, short, long). Default: none', false, false);
     }
 
     /**
@@ -180,7 +186,7 @@ final class WatermarkedImageViewHelper extends AbstractTagBasedViewHelper
 
         try {
             $image = $this->imageService->getImage($src, $this->arguments['image'], (bool)$this->arguments['treatIdAsReference']);
-            
+
             $processedImage = Uri\WatermarkedImageViewHelper::processImage($image, $this->arguments, $this->imageService, $this->renderingContext);
 
             $imageUri = $this->imageService->getImageUri($processedImage, $this->arguments['absolute']);
@@ -189,7 +195,7 @@ final class WatermarkedImageViewHelper extends AbstractTagBasedViewHelper
             if ($cropString === null && $image->hasProperty('crop') && $image->getProperty('crop')) {
                 $cropString = $image->getProperty('crop');
             }
-    
+
             $cropVariantCollection = CropVariantCollection::create((string)$cropString);
             $cropVariant = $this->arguments['cropVariant'] ?: 'default';
             $cropArea = $cropVariantCollection->getCropArea($cropVariant);
