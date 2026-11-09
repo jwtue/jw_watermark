@@ -5,3 +5,11 @@
 /.gitattributes export-ignore
 /.gitignore     export-ignore
 /AGENTS.md      export-ignore
+/.editorconfig  export-ignore
+
+# Text files are stored with LF line endings. A Windows checkout may still use
+# CRLF locally via core.autocrlf — that is fine, the normalisation happens on the
+# way into the repository. The icons must never be touched by it.
+*               text=auto
+*.gif           binary
+*.png           binary

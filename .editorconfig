@@ -1,0 +1,26 @@
+# Formatting conventions for jw_watermark.
+#
+# The repository used to mix tabs and spaces inside the same file, which turned
+# every contribution made with a normally configured IDE into a whitespace-heavy
+# diff. The rules below are what the code was normalised to; keep them.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{yml,yaml,json}]
+indent_size = 2
+
+[*.md]
+# Markdown gives meaning to two trailing spaces (hard line break).
+trim_trailing_whitespace = false
+indent_size = 2
+
+[LICENSE]
+indent_style = unset
+indent_size = unset
