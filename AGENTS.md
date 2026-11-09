@@ -79,17 +79,29 @@ WebP but not AVIF) and that `webp`/`avif` must be in `$GLOBALS['TYPO3_CONF_VARS'
   trailers. AI assistance is disclosed transparently in prose instead — see the README's
   "Development notes".
 - Keep the two ViewHelpers' argument lists in sync; they intentionally accept the same arguments.
-- **Formatting: 4 spaces, no tabs.** Declared in `.editorconfig` and enforced by
-  `.github/check-formatting.sh` (run it before pushing; the Formatting workflow runs the same
-  script). It checks whitespace only — indentation characters, trailing whitespace, final
-  newline, and LF line endings in the repository.
+- **Formatting: enforced, do not hand-tune.** The style is PER-CS3x0 (the successor to PSR-12)
+  plus the TYPO3 rule set, via `typo3/coding-standards` in `require-dev`. Whitespace basics
+  (4 spaces, LF, final newline, no trailing whitespace) are also declared in `.editorconfig`.
+
+  Before pushing:
+
+  ```
+  composer install
+  vendor/bin/php-cs-fixer fix --config=.php-cs-fixer.dist.php --dry-run --diff   # inspect
+  vendor/bin/php-cs-fixer fix --config=.php-cs-fixer.dist.php                    # apply
+  sh .github/check-formatting.sh                                                 # whitespace only
+  ```
+
+  The Formatting workflow runs both on every push and pull request. The cheap whitespace script
+  also covers the non-PHP files, which php-cs-fixer does not see.
 
   The files used to mix tabs and spaces *within* the same file, so every contribution made with
   a normally configured IDE arrived as a whitespace-heavy diff that buried the actual change.
-  They were normalised in one dedicated commit, listed in `.git-blame-ignore-revs` — configure
+  They were normalised in two dedicated commits (whitespace first, then the style pass), both
+  listed in `.git-blame-ignore-revs` — configure
   `git config blame.ignoreRevsFile .git-blame-ignore-revs` once to keep `git blame` useful.
 
-  There is deliberately **no full PSR-12 pass** (no php-cs-fixer, no `typo3/coding-standards`)
-  yet: brace placement, `else if` vs `elseif` and similar are untouched. Adding one is a
-  reasonable next step, but it belongs in its own commit, appended to `.git-blame-ignore-revs`,
-  and must not be mixed with a behavioural change.
+  Note that `setRiskyAllowed(true)` is part of the TYPO3 config, so the risky rules are active.
+  They happened to match nothing when the style pass was applied, but a future change could trip
+  one. If `php-cs-fixer` ever proposes something that alters behaviour, verify it by hand instead
+  of trusting the fixer, and keep style and behavioural changes in separate commits.

@@ -1,9 +1,11 @@
 name: Formatting
 
-# Keeps the whitespace conventions from .editorconfig enforced, so a
-# contribution made with a normally configured IDE no longer produces a
-# whitespace-heavy diff. Runs the same script contributors run locally:
-#   sh .github/check-formatting.sh
+# Keeps the coding style enforced, so a contribution made with a normally
+# configured IDE no longer produces a whitespace-heavy diff.
+#
+# Two jobs on purpose: the whitespace job is cheap, needs no dependencies and
+# also covers the non-PHP files; the php-cs-fixer job is the authoritative
+# style check for PHP but has to install the dev toolchain first.
 on:
   push:
     branches:
@@ -22,8 +24,27 @@ jobs:
 
       - name: Check PHP syntax
         run: |
-          # A reformat must never change behaviour; a syntax check is the cheap
-          # part of that guarantee.
           for f in $(git ls-files '*.php'); do
             php -l "$f"
           done
+
+  php-cs-fixer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          # The extension supports PHP 8.1 and up; check the style on the lowest
+          # supported version so the fixer cannot suggest newer syntax.
+          php-version: '8.1'
+          extensions: intl, mbstring, json
+          tools: composer
+
+      - name: Install dev dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Check coding style
+        run: vendor/bin/php-cs-fixer fix --config=.php-cs-fixer.dist.php --dry-run --diff

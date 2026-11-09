@@ -24,3 +24,15 @@
 
 # Build output of the release workflow (`git archive` writes the TER ZIP here).
 /build/
+
+# Composer dev toolchain (the extension itself declares no lock file; the
+# installed version is whatever composer.json allows).
+/vendor/
+/composer.lock
+
+# php-cs-fixer result cache.
+/.php-cs-fixer.cache
+
+# Created by the TYPO3 installer during `composer install` in this repository
+# (web-dir entry point); not part of the extension.
+/public/
