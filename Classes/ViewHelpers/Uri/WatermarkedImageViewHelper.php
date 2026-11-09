@@ -82,7 +82,7 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
         $this->registerArgument('watermarkOpacity', 'string', 'opacity value for the watermark image (0=fully transparent, 1=fully opaque)');
         $this->registerArgument('watermarkBackgroundColor', 'string', 'hex code for the background color of the watermark');
         $this->registerArgument('watermarkBackgroundOpacity', 'string', 'opacity value for the background color (0=fully transparent, 1=fully opaque)');
-        $this->registerArgument('watermarkOffset', 'int', 'offset from the edge (both axes) in pixels. Overrules watermarkOffsetX and watermarkOffsetY. If watermarkOffsetRelative is set, this is interpreted as a percentage value of the image', false, null);
+        $this->registerArgument('watermarkOffset', 'int', 'offset from the edge, used for any axis that has no watermarkOffsetX/watermarkOffsetY of its own. If watermarkOffsetRelative is set, this is interpreted as a percentage value of the image', false, null);
         $this->registerArgument('watermarkOffsetRelative', 'string', 'Interpret watermark offset relative to image dimension (values: width, height, short, long). Default: none', false, false);
         $this->registerArgument('watermarkOffsetX', 'int', 'offset from the left or right edge in pixels. If watermarkOffsetXRelative is set, this is interpreted as a percentage value of the image', false, null);
         $this->registerArgument('watermarkOffsetXRelative', 'string', 'Interpret the horizontal watermark offset relative to image dimension (values: width, height, short, long). Default: none', false, false);
@@ -319,25 +319,26 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
                 $backgroundcolorhex = $arguments['watermarkBackgroundColor'] ?: '000000';
                 $backgroundcoloralpha = 127 - ($arguments['watermarkBackgroundOpacity'] ?: 0) * 127;
 
-                $offsetX = ($arguments['watermarkOffset'] ?? $arguments['watermarkOffsetX']) ?: 0;
-                $offsetXPercentage = $offsetX / 100;
-                $offsetX = match ($arguments['watermarkOffsetRelative'] ?: $arguments['watermarkOffsetXRelative']) {
-                    'width' => $imageWidth * $offsetXPercentage,
-                    'height' => $imageHeight * $offsetXPercentage,
-                    'short' => $imageShort * $offsetXPercentage,
-                    'long' => $imageLong * $offsetXPercentage,
-                    default => $offsetX,
-                };
-
-                $offsetY = ($arguments['watermarkOffset'] ?? $arguments['watermarkOffsetY']) ?: 0;
-                $offsetYPercentage = $offsetY / 100;
-                $offsetY = match ($arguments['watermarkOffsetRelative'] ?: $arguments['watermarkOffsetYRelative']) {
-                    'width' => $imageWidth * $offsetYPercentage,
-                    'height' => $imageHeight * $offsetYPercentage,
-                    'short' => $imageShort * $offsetYPercentage,
-                    'long' => $imageLong * $offsetYPercentage,
-                    default => $offsetY,
-                };
+                $imageDimensions = [
+                    'width' => $imageWidth,
+                    'height' => $imageHeight,
+                    'short' => $imageShort,
+                    'long' => $imageLong,
+                ];
+                $offsetX = self::resolveOffset(
+                    $arguments['watermarkOffsetX'],
+                    $arguments['watermarkOffsetXRelative'],
+                    $arguments['watermarkOffset'],
+                    $arguments['watermarkOffsetRelative'],
+                    $imageDimensions
+                );
+                $offsetY = self::resolveOffset(
+                    $arguments['watermarkOffsetY'],
+                    $arguments['watermarkOffsetYRelative'],
+                    $arguments['watermarkOffset'],
+                    $arguments['watermarkOffsetRelative'],
+                    $imageDimensions
+                );
 
                 $topleftx = $offsetX;
                 $toplefty = $offsetY;
@@ -418,6 +419,43 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
     private static function isSupportedMimeType(?string $mimeType): bool
     {
         return isset(self::WRITERS[$mimeType]) && function_exists(self::WRITERS[$mimeType]);
+    }
+
+    /**
+     * Resolves one axis' watermark offset to a pixel value.
+     *
+     * Two rules, both of which the arguments only make sense under:
+     *
+     * - The axis-specific argument wins over the general one, as margin-left wins over margin
+     *   in CSS. watermarkOffset is the fallback for an axis that states no value of its own.
+     * - A value and its unit are read as a pair. An axis value uses its own *Relative setting
+     *   and only falls back to watermarkOffsetRelative when it has none, so a general unit
+     *   cannot silently reinterpret an axis that declared one.
+     *
+     * Without a unit the value already is a pixel count.
+     *
+     * @param array<string, int> $imageDimensions keyed by the accepted *Relative values
+     */
+    private static function resolveOffset(
+        $axisValue,
+        $axisUnit,
+        $generalValue,
+        $generalUnit,
+        array $imageDimensions
+    ): float {
+        if ($axisValue !== null && $axisValue !== '') {
+            $value = $axisValue;
+            $unit = $axisUnit ?: $generalUnit;
+        } else {
+            $value = $generalValue ?? 0;
+            $unit = $generalUnit;
+        }
+
+        if (!is_string($unit) || !isset($imageDimensions[$unit])) {
+            return (float)$value;
+        }
+
+        return $imageDimensions[$unit] * ((float)$value / 100);
     }
 
     /**

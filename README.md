@@ -167,7 +167,9 @@ Vertical position of the watermark in the image (top/middle/bottom)
 ```
 watermarkOffset
 ```
-Offset from the edge in pixels (horizontally and vertically)
+Offset from the edge in pixels, applied to both axes. Use it for an equal offset; for
+different offsets per axis, use `watermarkOffsetX` and `watermarkOffsetY`, which take
+precedence over this one.
 
 ```
 watermarkOffsetRelative
@@ -176,6 +178,33 @@ If set, `watermarkOffset` is not interpreted as a pixel value, but as a percenta
 (0-100) of the image dimensions. Possible values are `width`, `height`, `long`, `short`. They
 set the dimension that the relative value is based upon (width/height of the image, or the
 long/short side of the image).
+
+```
+watermarkOffsetX
+watermarkOffsetY
+```
+Offset from the edge for one axis only: `watermarkOffsetX` from the left or right edge,
+`watermarkOffsetY` from the top or bottom one (which edge depends on
+`watermarkPositionHorizontal` / `watermarkPositionVertical`). Either one overrides
+`watermarkOffset` for its own axis and leaves the other axis to it.
+
+```
+watermarkOffsetXRelative
+watermarkOffsetYRelative
+```
+The same as `watermarkOffsetRelative`, but for one axis. The unit belongs to the value it
+names: `watermarkOffsetX` is read with `watermarkOffsetXRelative` and only falls back to
+`watermarkOffsetRelative` when no `watermarkOffsetXRelative` is given, so a general unit
+never reinterprets an axis that states its own.
+
+For example, 5% of the width on the horizontal axis and 10% of the height on the vertical:
+
+```html
+<jw:watermarkedImage src="{file}" watermarkSrc="EXT:my_ext/Resources/Public/wm.png"
+                     watermarkPositionHorizontal="right" watermarkPositionVertical="bottom"
+                     watermarkOffsetX="5" watermarkOffsetXRelative="width"
+                     watermarkOffsetY="10" watermarkOffsetYRelative="height" />
+```
 
 ```
 watermarkWidth
