@@ -46,6 +46,16 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 
     /** Formats with an alpha channel — transparency must be preserved when writing. */
     private const ALPHA_FORMATS = [self::MIME_PNG, self::MIME_WEBP, self::MIME_AVIF];
+
+    /** Reverse lookup for determineOutputMimeType(), which only knows the target extension. */
+    private const MIME_BY_EXTENSION = [
+        'jpg'  => self::MIME_JPEG,
+        'jpeg' => self::MIME_JPEG,
+        'png'  => self::MIME_PNG,
+        'webp' => self::MIME_WEBP,
+        'avif' => self::MIME_AVIF,
+    ];
+
     /**
      * Initialize arguments
      */
@@ -175,7 +185,9 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
 
         $processedImage = $imageService->applyProcessingInstructions($image, $processingInstructions);
 
-        $mimeType = $processedImage->getMimeType();
+        // Not getMimeType(): without a conversion that reports the original's format, which
+        // need not match the extension TYPO3 reserved for the processed file.
+        $mimeType = self::determineOutputMimeType($processedImage);
 
         // When does the watermark have to be applied?
         //
@@ -356,6 +368,14 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
                 // would be recomputed on *every* page load. add() decides on its own, via
                 // isPersisted(), whether to insert or update.
                 if ($wasUsingOriginalFile) {
+                    // Without a resize TYPO3 never measured the image, so the record would
+                    // keep width/height at 0 — and the tag ViewHelper renders those as
+                    // width=""/height="" (v12/v13) or omits them (v14). We have the bitmap,
+                    // so we know the real values. The watermark never changes them.
+                    $processedImage->updateProperties([
+                        'width' => imagesx($imageBitmap),
+                        'height' => imagesy($imageBitmap),
+                    ]);
                     self::persistProcessedFile($processedImage);
                 }
 
@@ -377,6 +397,39 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
     private static function isSupportedMimeType(?string $mimeType): bool
     {
         return isset(self::WRITERS[$mimeType]) && function_exists(self::WRITERS[$mimeType]);
+    }
+
+    /**
+     * The format the watermarked file has to be written in.
+     *
+     * Usually that is simply the processed file's own mime type. The usesOriginalFile() case
+     * is different: there TYPO3 did not convert anything, so getMimeType() still reports the
+     * *original's* type — while the target filename TYPO3 has reserved may well carry another
+     * extension. Two configuration points cause that:
+     *
+     * - a format missing from GFX/imagefile_ext is not processed at all (v12 ships without
+     *   webp and avif there);
+     * - from v14, GraphicalFunctions::determineDefaultProcessingFileExtension() maps every
+     *   format missing from GFX/imageFileConversionFormats to the 'default' entry, i.e. PNG,
+     *   and avif is not in that list.
+     *
+     * Writing the original's format would then put WebP or AVIF bytes into a file named
+     * .png, which the web server serves as Content-Type: image/png. Browsers sniff images
+     * and still display it, but the declared type is wrong for everything else that reads
+     * it. So the target extension decides, and the bitmap is re-encoded accordingly.
+     */
+    private static function determineOutputMimeType($processedImage): ?string
+    {
+        $mimeType = $processedImage->getMimeType();
+
+        if (!$processedImage->usesOriginalFile()) {
+            return $mimeType;
+        }
+
+        $targetFilename = self::getProcessingTask($processedImage)->getTargetFilename();
+        $extension = strtolower(pathinfo($targetFilename, PATHINFO_EXTENSION));
+
+        return self::MIME_BY_EXTENSION[$extension] ?? $mimeType;
     }
 
     /**

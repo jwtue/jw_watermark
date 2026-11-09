@@ -47,6 +47,16 @@ Testing).
 - In the `usesOriginalFile()` case (no resizing requested), the modified file must be persisted via
   `persistProcessedFile()`, otherwise the record keeps pointing at the original and the watermark is
   recomputed on every request.
+- The `usesOriginalFile()` case needs two more things, both because TYPO3 never actually processed
+  the file there:
+  - **Write in the target extension's format, not the original's.** `getMimeType()` reports the
+    original's type, while the reserved target filename may carry another extension — a format
+    missing from `GFX/imagefile_ext` is not processed at all (v12 ships without `webp`/`avif`), and
+    from v14 `GFX/imageFileConversionFormats` maps anything it does not list, `avif` included, to
+    PNG. `determineOutputMimeType()` resolves this; without it a `.png` file ends up holding WebP
+    or AVIF bytes and is served as `Content-Type: image/png`.
+  - **Record the dimensions.** Nothing measured the image, so the record would keep width/height at
+    0 and the tag ViewHelper would emit `width=""`/`height=""` (v12/v13) or omit them (v14).
 
 ## Supported image formats
 
