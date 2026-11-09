@@ -68,8 +68,18 @@ deliberately excluded. Adding a raster format means one `WRITERS` entry plus the
 
 ## Testing
 
-There is no automated test suite in the repository. Verify changes by **rendering a template in a
-real TYPO3 installation of each supported major version** and inspecting the output:
+Run the harness in `Tests/Manual/` against a real installation of **each** supported major:
+
+```sh
+sh Tests/Manual/run.sh /path/to/typo3-install
+```
+
+It boots TYPO3 in CLI mode, renders Fluid templates using both ViewHelpers and checks the result;
+it touches no page, content element or TypoScript in the installation. See its README for what the
+`warn` lines mean — on a GraphicsMagick setup, one on v13/v14 and two on v12 are expected.
+
+There is still no unit test suite, and the harness is not a substitute for looking at a rendered
+page when you change something visual. What it covers:
 
 - all four formats, as both the tag and the URI ViewHelper;
 - responsive `srcset` built from several `jw:uri.watermarkedImage` calls;

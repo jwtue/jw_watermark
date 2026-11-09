@@ -5,6 +5,7 @@
 /.gitattributes export-ignore
 /.gitignore     export-ignore
 /AGENTS.md      export-ignore
+/Tests          export-ignore
 /.editorconfig  export-ignore
 /.git-blame-ignore-revs export-ignore
 /.php-cs-fixer.dist.php export-ignore
