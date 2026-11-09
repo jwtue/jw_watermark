@@ -183,6 +183,12 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
             'watermarkHeightRelative' => $arguments['watermarkHeightRelative'],
         ];
 
+        // Only when set: an empty fileExtension would make ImageCropScaleMaskTask treat the
+        // empty string as the target extension instead of deriving one from the source.
+        if (!empty($arguments['fileExtension'])) {
+            $processingInstructions['fileExtension'] = $arguments['fileExtension'];
+        }
+
         $processedImage = $imageService->applyProcessingInstructions($image, $processingInstructions);
 
         // Not getMimeType(): without a conversion that reports the original's format, which
