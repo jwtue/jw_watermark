@@ -42,4 +42,12 @@ echo "== pass 1 (generates the processed files)"
 echo "== pass 2 (must serve everything from cache)"
 "$PHP" "$DIR/run-test.php" "$ROOT" 2 || STATUS=$?
 
+# The offset arguments are part of the processing instructions, so the same
+# arguments produce the same checksum and the same cached file. Without this
+# reset the positions measured below would be whatever the previous run wrote,
+# which silently hides any change to the offset logic.
+echo "== offsets (cold cache again)"
+"$PHP" "$DIR/reset-processed.php" "$ROOT"
+"$PHP" "$DIR/offset-test.php" "$ROOT" || STATUS=$?
+
 exit "$STATUS"

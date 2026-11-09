@@ -33,6 +33,13 @@ formats you want covered.
 - a responsive `srcset` built from three `jw:uri.watermarkedImage` calls, each at its own width
 - a second render serves everything from cache: no new `sys_file_processedfile` records, identical
   URLs, and the files untouched down to their sha256
+- where the watermark actually lands for each combination of `watermarkOffset`,
+  `watermarkOffsetX`/`Y` and their `*Relative` units, by locating the composited area in the output
+
+Note that the offset arguments are part of the processing instructions, so the same arguments
+produce the same checksum and the same cached file. `run.sh` therefore clears the fixtures' processed
+files again before the offset cases — without that, a change to the offset logic measures whatever
+the previous run wrote and appears to have had no effect.
 
 ## Reading the output
 
