@@ -1,0 +1,9 @@
+# Commits that only reformat and should be skipped by `git blame`.
+#
+# Enable it once per clone:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# GitHub's blame view honours this file automatically.
+
+# Normalise whitespace: tabs to 4 spaces, strip trailing whitespace
+70197d4567e8a752722d4b0b923472443e7ed1c8

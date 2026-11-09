@@ -6,6 +6,7 @@
 /.gitignore     export-ignore
 /AGENTS.md      export-ignore
 /.editorconfig  export-ignore
+/.git-blame-ignore-revs export-ignore
 
 # Text files are stored with LF line endings. A Windows checkout may still use
 # CRLF locally via core.autocrlf — that is fine, the normalisation happens on the

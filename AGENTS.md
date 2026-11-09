@@ -79,3 +79,17 @@ WebP but not AVIF) and that `webp`/`avif` must be in `$GLOBALS['TYPO3_CONF_VARS'
   trailers. AI assistance is disclosed transparently in prose instead — see the README's
   "Development notes".
 - Keep the two ViewHelpers' argument lists in sync; they intentionally accept the same arguments.
+- **Formatting: 4 spaces, no tabs.** Declared in `.editorconfig` and enforced by
+  `.github/check-formatting.sh` (run it before pushing; the Formatting workflow runs the same
+  script). It checks whitespace only — indentation characters, trailing whitespace, final
+  newline, and LF line endings in the repository.
+
+  The files used to mix tabs and spaces *within* the same file, so every contribution made with
+  a normally configured IDE arrived as a whitespace-heavy diff that buried the actual change.
+  They were normalised in one dedicated commit, listed in `.git-blame-ignore-revs` — configure
+  `git config blame.ignoreRevsFile .git-blame-ignore-revs` once to keep `git blame` useful.
+
+  There is deliberately **no full PSR-12 pass** (no php-cs-fixer, no `typo3/coding-standards`)
+  yet: brace placement, `else if` vs `elseif` and similar are untouched. Adding one is a
+  reasonable next step, but it belongs in its own commit, appended to `.git-blame-ignore-revs`,
+  and must not be mixed with a behavioural change.
