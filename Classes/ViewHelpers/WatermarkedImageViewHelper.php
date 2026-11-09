@@ -145,8 +145,12 @@ final class WatermarkedImageViewHelper extends AbstractTagBasedViewHelper
         $this->registerArgument('watermarkOpacity', 'string', 'opacity value for the watermark image (0=fully transparent, 1=fully opaque)');
         $this->registerArgument('watermarkBackgroundColor', 'string', 'hex code for the background color of the watermark');
         $this->registerArgument('watermarkBackgroundOpacity', 'string', 'opacity value for the background color (0=fully transparent, 1=fully opaque)');
-        $this->registerArgument('watermarkOffset', 'int', 'offset from the edge in pixels. If watermarkOffsetRelative is set, this is interpreted as a percentage value of the image', false, 0);
+        $this->registerArgument('watermarkOffset', 'int', 'offset from the edge (both axes) in pixels. Overrules watermarkOffsetX and watermarkOffsetY. If watermarkOffsetRelative is set, this is interpreted as a percentage value of the image', false, null);
         $this->registerArgument('watermarkOffsetRelative', 'string', 'Interpret watermark offset relative to image dimension (values: width, height, short, long). Default: none', false, false);
+        $this->registerArgument('watermarkOffsetX', 'int', 'offset from the left or right edge in pixels. If watermarkOffsetXRelative is set, this is interpreted as a percentage value of the image', false, null);
+        $this->registerArgument('watermarkOffsetXRelative', 'string', 'Interpret the horizontal watermark offset relative to image dimension (values: width, height, short, long). Default: none', false, false);
+        $this->registerArgument('watermarkOffsetY', 'int', 'offset from the top or bottom edge in pixels. If watermarkOffsetYRelative is set, this is interpreted as a percentage value of the image', false, null);
+        $this->registerArgument('watermarkOffsetYRelative', 'string', 'Interpret the vertical watermark offset relative to image dimension (values: width, height, short, long). Default: none', false, false);
         $this->registerArgument('watermarkPositionHorizontal', 'string', 'horizontal position in the image (left/center/right)');
         $this->registerArgument('watermarkPositionVertical', 'string', 'vertical position in the image (top/middle/bottom)');
         $this->registerArgument('watermarkWidth', 'int', 'Water mark width in pixels. If watermarkWidthRelative is set, this is interpreted as a percentage value of the image.', false, false);
