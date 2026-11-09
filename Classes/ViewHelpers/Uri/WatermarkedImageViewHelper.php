@@ -5,19 +5,47 @@ namespace JwTue\Watermark\ViewHelpers\Uri;
 use Psr\Http\Message\RequestInterface;
 use TYPO3\CMS\Core\Imaging\ImageManipulation\CropVariantCollection;
 use TYPO3\CMS\Core\Resource\Exception\ResourceDoesNotExistException;
-use TYPO3\CMS\Core\Utility\GeneralUtility;
-use TYPO3\CMS\Extbase\Service\ImageService;
 use TYPO3\CMS\Core\Resource\FileInterface;
 use TYPO3\CMS\Core\Resource\ProcessedFileRepository;
 use TYPO3\CMS\Core\Resource\Processing\TaskTypeRegistry;
+use TYPO3\CMS\Core\Utility\GeneralUtility;
+use TYPO3\CMS\Core\Utility\MathUtility;
+use TYPO3\CMS\Extbase\Service\ImageService;
 use TYPO3\CMS\Frontend\ContentObject\ContentObjectRenderer;
 use TYPO3Fluid\Fluid\Core\Rendering\RenderingContextInterface;
 use TYPO3Fluid\Fluid\Core\ViewHelper\AbstractViewHelper;
 use TYPO3Fluid\Fluid\Core\ViewHelper\Exception;
-use TYPO3\CMS\Core\Utility\MathUtility;
 
 class WatermarkedImageViewHelper extends AbstractViewHelper
 {
+    public const MIME_JPEG = 'image/jpeg';
+    public const MIME_PNG = 'image/png';
+    public const MIME_WEBP = 'image/webp';
+    public const MIME_AVIF = 'image/avif';
+
+    /**
+     * Image formats a watermark can be applied to.
+     *
+     * The key is the MIME type, the value the GD function used to write it. Not every GD
+     * build supports all formats — WebP and AVIF are build-dependent — so availability is
+     * checked at runtime. If a format cannot be written, the image is passed through
+     * unchanged instead of throwing an exception.
+     *
+     * Deliberately excluded:
+     * - GIF: palette-based (max. 256 colors), the watermark would produce visible banding.
+     *   Also, imagecreatefromstring() only reads the first frame of an animated GIF — the
+     *   animation would be lost silently.
+     * - SVG: vector format, GD cannot process it.
+     */
+    private const WRITERS = [
+        self::MIME_JPEG => 'imagejpeg',
+        self::MIME_PNG  => 'imagepng',
+        self::MIME_WEBP => 'imagewebp',
+        self::MIME_AVIF => 'imageavif',
+    ];
+
+    /** Formats with an alpha channel — transparency must be preserved when writing. */
+    private const ALPHA_FORMATS = [self::MIME_PNG, self::MIME_WEBP, self::MIME_AVIF];
     /**
      * Initialize arguments
      */
@@ -106,7 +134,8 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
      * parameter used to be missing while still being referenced in the catch blocks, so
      * error handling failed on an undefined variable.
      */
-    public static function processImage(FileInterface $image, array $arguments, ImageService $imageService, ?RenderingContextInterface $renderingContext = null): FileInterface {
+    public static function processImage(FileInterface $image, array $arguments, ImageService $imageService, ?RenderingContextInterface $renderingContext = null): FileInterface
+    {
 
         $watermarkSrc = $arguments['watermarkSrc'];
         $watermarkImage = $arguments['watermarkImage'];
@@ -141,7 +170,7 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
             'watermarkWidth' => $arguments['watermarkWidth'],
             'watermarkWidthRelative' => $arguments['watermarkWidthRelative'],
             'watermarkHeight' => $arguments['watermarkHeight'],
-            'watermarkHeightRelative' => $arguments['watermarkHeightRelative']
+            'watermarkHeightRelative' => $arguments['watermarkHeightRelative'],
         ];
 
         $processedImage = $imageService->applyProcessingInstructions($image, $processingInstructions);
@@ -186,13 +215,13 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
                 if ($arguments['watermarkWidth']) {
                     $newWidth = $arguments['watermarkWidth'];
                     $newWidthPercentage = $arguments['watermarkWidth'] / 100;
-                    if ($arguments['watermarkWidthRelative'] == "width") {
+                    if ($arguments['watermarkWidthRelative'] == 'width') {
                         $newWatermarkWidth = $imageWidth * $newWidthPercentage;
-                    } else if ($arguments['watermarkWidthRelative'] == "height") {
+                    } elseif ($arguments['watermarkWidthRelative'] == 'height') {
                         $newWatermarkWidth = $imageHeight * $newWidthPercentage;
-                    } else if ($arguments['watermarkWidthRelative'] == "short") {
+                    } elseif ($arguments['watermarkWidthRelative'] == 'short') {
                         $newWatermarkWidth = $imageShort * $newWidthPercentage;
-                    } else if ($arguments['watermarkWidthRelative'] == "long") {
+                    } elseif ($arguments['watermarkWidthRelative'] == 'long') {
                         $newWatermarkWidth = $imageLong * $newWidthPercentage;
                     } else {
                         $newWatermarkWidth = $newWidth;
@@ -201,13 +230,13 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
                 if ($arguments['watermarkHeight']) {
                     $newHeight = $arguments['watermarkHeight'];
                     $newHeightPercentage = $arguments['watermarkHeight'] / 100;
-                    if ($arguments['watermarkHeightRelative'] == "width") {
+                    if ($arguments['watermarkHeightRelative'] == 'width') {
                         $newWatermarkHeight = $imageWidth * $newHeightPercentage;
-                    } else if ($arguments['watermarkHeightRelative'] == "height") {
+                    } elseif ($arguments['watermarkHeightRelative'] == 'height') {
                         $newWatermarkHeight = $imageHeight * $newHeightPercentage;
-                    } else if ($arguments['watermarkHeightRelative'] == "short") {
+                    } elseif ($arguments['watermarkHeightRelative'] == 'short') {
                         $newWatermarkHeight = $imageShort * $newHeightPercentage;
-                    } else if ($arguments['watermarkHeightRelative'] == "long") {
+                    } elseif ($arguments['watermarkHeightRelative'] == 'long') {
                         $newWatermarkHeight = $imageLong * $newHeightPercentage;
                     } else {
                         $newWatermarkHeight = $newHeight;
@@ -217,9 +246,9 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
                 if ($newWatermarkWidth == null && $newWatermarkHeight == null) {
                     $newWatermarkWidth = imagesx($watermarkBitmap);
                     $newWatermarkHeight = imagesy($watermarkBitmap);
-                } else if ($newWatermarkWidth != null && $newWatermarkHeight == null) {
+                } elseif ($newWatermarkWidth != null && $newWatermarkHeight == null) {
                     $newWatermarkHeight = $newWatermarkWidth / $watermarkRatio;
-                } else if ($newWatermarkWidth == null && $newWatermarkHeight != null) {
+                } elseif ($newWatermarkWidth == null && $newWatermarkHeight != null) {
                     $newWatermarkWidth = $newWatermarkHeight * $watermarkRatio;
                 }
 
@@ -245,55 +274,53 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
                     for ($y = 0; $y < imagesy($watermarkResizedBitmap); $y++) {
                         $color = imagecolorat($watermarkResizedBitmap, $x, $y);
 
-                        $rgba = array(
-                            "red" => (($color >> 16) & 0xFF),
-                            "green" => (($color >> 8) & 0xFF),
-                            "blue" => ($color  & 0xFF),
-                            "alpha" => (($color & 0x7F000000) >> 24)
-                        );
+                        $rgba = [
+                            'red' => (($color >> 16) & 0xFF),
+                            'green' => (($color >> 8) & 0xFF),
+                            'blue' => ($color  & 0xFF),
+                            'alpha' => (($color & 0x7F000000) >> 24),
+                        ];
 
-
-                        $rgba['alpha'] = 127-$rgba['alpha'];
+                        $rgba['alpha'] = 127 - $rgba['alpha'];
                         $rgba['alpha'] *= $opacity;
-                        $rgba['alpha'] = 127-$rgba['alpha'];
+                        $rgba['alpha'] = 127 - $rgba['alpha'];
 
                         $color = imagecolorallocatealpha($watermarkOpacityBitmap, $rgba['red'], $rgba['green'], $rgba['blue'], $rgba['alpha']);
                         imagesetpixel($watermarkOpacityBitmap, $x, $y, $color);
                     }
                 }
 
-                $backgroundcolorhex = $arguments['watermarkBackgroundColor'] ?: "000000";
-                $backgroundcoloralpha = 127-($arguments['watermarkBackgroundOpacity'] ?: 0)*127;
+                $backgroundcolorhex = $arguments['watermarkBackgroundColor'] ?: '000000';
+                $backgroundcoloralpha = 127 - ($arguments['watermarkBackgroundOpacity'] ?: 0) * 127;
 
                 $offset = $arguments['watermarkOffset'] ?: 0;
 
                 $offsetPercentage = $arguments['watermarkOffset'] / 100;
-                if ($arguments['watermarkOffsetRelative'] == "width") {
+                if ($arguments['watermarkOffsetRelative'] == 'width') {
                     $offset = $imageWidth * $offsetPercentage;
-                } else if ($arguments['watermarkOffsetRelative'] == "height") {
+                } elseif ($arguments['watermarkOffsetRelative'] == 'height') {
                     $offset = $imageHeight * $offsetPercentage;
-                } else if ($arguments['watermarkOffsetRelative'] == "short") {
+                } elseif ($arguments['watermarkOffsetRelative'] == 'short') {
                     $offset = $imageShort * $offsetPercentage;
-                } else if ($arguments['watermarkOffsetRelative'] == "long") {
+                } elseif ($arguments['watermarkOffsetRelative'] == 'long') {
                     $offset = $imageLong * $offsetPercentage;
                 }
-
 
                 $topleftx = $offset;
                 $toplefty = $offset;
 
                 if ($arguments['watermarkPositionHorizontal']) {
-                    if ($arguments['watermarkPositionHorizontal'] == "center") {
-                        $topleftx = (imagesx($imageBitmap)/2)-(imagesx($watermarkOpacityBitmap)/2);
-                    } else if ($arguments['watermarkPositionHorizontal'] == "right") {
-                        $topleftx = imagesx($imageBitmap)-imagesx($watermarkOpacityBitmap)-$offset;
+                    if ($arguments['watermarkPositionHorizontal'] == 'center') {
+                        $topleftx = (imagesx($imageBitmap) / 2) - (imagesx($watermarkOpacityBitmap) / 2);
+                    } elseif ($arguments['watermarkPositionHorizontal'] == 'right') {
+                        $topleftx = imagesx($imageBitmap) - imagesx($watermarkOpacityBitmap) - $offset;
                     }
                 }
                 if ($arguments['watermarkPositionVertical']) {
-                    if ($arguments['watermarkPositionVertical'] == "middle") {
-                        $toplefty = (imagesy($imageBitmap)/2)-(imagesy($watermarkOpacityBitmap)/2);
-                    } else if ($arguments['watermarkPositionVertical'] == "bottom") {
-                        $toplefty = imagesy($imageBitmap)-imagesy($watermarkOpacityBitmap)-$offset;
+                    if ($arguments['watermarkPositionVertical'] == 'middle') {
+                        $toplefty = (imagesy($imageBitmap) / 2) - (imagesy($watermarkOpacityBitmap) / 2);
+                    } elseif ($arguments['watermarkPositionVertical'] == 'bottom') {
+                        $toplefty = imagesy($imageBitmap) - imagesy($watermarkOpacityBitmap) - $offset;
                     }
                 }
 
@@ -301,14 +328,14 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
                 $topleftx = (int)round($topleftx);
                 $toplefty = (int)round($toplefty);
 
-                $backgroundcolor = array(hexdec(substr($backgroundcolorhex, 0, 2)), hexdec(substr($backgroundcolorhex, 2, 2)), hexdec(substr($backgroundcolorhex, 4, 2)));
+                $backgroundcolor = [hexdec(substr($backgroundcolorhex, 0, 2)), hexdec(substr($backgroundcolorhex, 2, 2)), hexdec(substr($backgroundcolorhex, 4, 2))];
 
                 $bgcolor = imagecolorallocatealpha($imageBitmap, $backgroundcolor[0], $backgroundcolor[1], $backgroundcolor[2], (int)round($backgroundcoloralpha));
-                imagefilledrectangle($imageBitmap, $topleftx, $toplefty, $topleftx+imagesx($watermarkOpacityBitmap), $toplefty+imagesy($watermarkOpacityBitmap), $bgcolor);
+                imagefilledrectangle($imageBitmap, $topleftx, $toplefty, $topleftx + imagesx($watermarkOpacityBitmap), $toplefty + imagesy($watermarkOpacityBitmap), $bgcolor);
 
                 imagecopy($imageBitmap, $watermarkOpacityBitmap, $topleftx, $toplefty, 0, 0, imagesx($watermarkOpacityBitmap), imagesy($watermarkOpacityBitmap));
 
-                $tmpname = tempnam(sys_get_temp_dir(), 'typo3watermark_'.rand());
+                $tmpname = tempnam(sys_get_temp_dir(), 'typo3watermark_' . rand());
 
                 self::writeImage($imageBitmap, $tmpname, $mimeType);
 
@@ -333,48 +360,19 @@ class WatermarkedImageViewHelper extends AbstractViewHelper
                 }
 
                 @unlink($tmpname);
-        } catch (ResourceDoesNotExistException $e) {
-            // thrown if file does not exist
-            throw new Exception(self::getExceptionMessage($e->getMessage(), $renderingContext), 1709565156, $e);
-        } catch (\UnexpectedValueException $e) {
-            // thrown if a file has been replaced with a folder
-            throw new Exception(self::getExceptionMessage($e->getMessage(), $renderingContext), 1709565157, $e);
-        } catch (\InvalidArgumentException $e) {
-            // thrown if file storage does not exist
-            throw new Exception(self::getExceptionMessage($e->getMessage(), $renderingContext), 1709565158, $e);
-        }
+            } catch (ResourceDoesNotExistException $e) {
+                // thrown if file does not exist
+                throw new Exception(self::getExceptionMessage($e->getMessage(), $renderingContext), 1709565156, $e);
+            } catch (\UnexpectedValueException $e) {
+                // thrown if a file has been replaced with a folder
+                throw new Exception(self::getExceptionMessage($e->getMessage(), $renderingContext), 1709565157, $e);
+            } catch (\InvalidArgumentException $e) {
+                // thrown if file storage does not exist
+                throw new Exception(self::getExceptionMessage($e->getMessage(), $renderingContext), 1709565158, $e);
+            }
         }
         return $processedImage;
     }
-
-    const MIME_JPEG = 'image/jpeg';
-    const MIME_PNG = 'image/png';
-    const MIME_WEBP = 'image/webp';
-    const MIME_AVIF = 'image/avif';
-
-    /**
-     * Image formats a watermark can be applied to.
-     *
-     * The key is the MIME type, the value the GD function used to write it. Not every GD
-     * build supports all formats — WebP and AVIF are build-dependent — so availability is
-     * checked at runtime. If a format cannot be written, the image is passed through
-     * unchanged instead of throwing an exception.
-     *
-     * Deliberately excluded:
-     * - GIF: palette-based (max. 256 colors), the watermark would produce visible banding.
-     *   Also, imagecreatefromstring() only reads the first frame of an animated GIF — the
-     *   animation would be lost silently.
-     * - SVG: vector format, GD cannot process it.
-     */
-    private const WRITERS = [
-        self::MIME_JPEG => 'imagejpeg',
-        self::MIME_PNG  => 'imagepng',
-        self::MIME_WEBP => 'imagewebp',
-        self::MIME_AVIF => 'imageavif',
-    ];
-
-    /** Formats with an alpha channel — transparency must be preserved when writing. */
-    private const ALPHA_FORMATS = [self::MIME_PNG, self::MIME_WEBP, self::MIME_AVIF];
 
     private static function isSupportedMimeType(?string $mimeType): bool
     {
