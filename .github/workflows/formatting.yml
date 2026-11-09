@@ -37,9 +37,11 @@ jobs:
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
         with:
-          # The extension supports PHP 8.1 and up; check the style on the lowest
-          # supported version so the fixer cannot suggest newer syntax.
-          php-version: '8.1'
+          # 8.2, not the extension's minimum of 8.1: typo3/coding-standards and the
+          # current typo3/cms-core both require ^8.2, so the dev toolchain cannot be
+          # installed on 8.1. php-cs-fixer will note the mismatch with composer.json
+          # and that warning is expected.
+          php-version: '8.2'
           extensions: intl, mbstring, json
           tools: composer
 
