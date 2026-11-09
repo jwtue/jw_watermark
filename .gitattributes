@@ -9,9 +9,9 @@
 /.git-blame-ignore-revs export-ignore
 /.php-cs-fixer.dist.php export-ignore
 
-# Text files are stored with LF line endings. A Windows checkout may still use
-# CRLF locally via core.autocrlf — that is fine, the normalisation happens on the
-# way into the repository. The icons must never be touched by it.
-*               text=auto
+# Text files are stored with LF line endings, and eol=lf keeps them LF in the
+# working tree too, overriding a contributor's core.autocrlf. Without that, PHP-CS-Fixer
+# reports line_ending violations on every Windows checkout. The icons stay binary.
+*               text=auto eol=lf
 *.gif           binary
 *.png           binary
